@@ -103,8 +103,12 @@ export async function createInvoice(formData: {
         .single()
 
     if (invoiceError || !invoice) {
-        logger.error('Failed to create invoice', invoiceError)
-        return { error: 'Failed to create invoice' }
+        logger.error('Failed to create invoice', {
+            invoiceError,
+            eventId: formData.eventId,
+            plannerId: userId,
+        })
+        return { error: invoiceError?.message || 'Failed to create invoice' }
     }
 
     // Insert items
