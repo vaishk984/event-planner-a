@@ -122,6 +122,17 @@ export async function convertIntakeToEvent(intakeId: string): Promise<ActionResu
     }
 
     // Map intake data to Event fields (match Event interface in types/domain.ts)
+    const intakeNotes = [
+        intake.specialRequests,
+        intake.food?.specialRequests,
+        intake.decor?.specialRequests,
+        intake.entertainment?.specialRequests,
+        intake.photography?.specialRequests,
+        intake.services?.specialRequests,
+    ]
+        .filter((value): value is string => Boolean(value && value.trim()))
+        .join('\n\n')
+
     const eventData = {
         plannerId: user.id,
         type: intake.eventType || 'wedding',
@@ -143,7 +154,8 @@ export async function convertIntakeToEvent(intakeId: string): Promise<ActionResu
         clientEmail: intake.email,
         endDate: intake.eventEndDate,
         venueName: intake.personalVenue?.name,
-        notes: intake.specialRequests,
+        venueAddress: intake.personalVenue?.address,
+        notes: intakeNotes || undefined,
         source: intake.source,
         submissionId: intake.id,
     }
