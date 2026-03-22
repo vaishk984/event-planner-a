@@ -13,6 +13,7 @@ import { eventService } from '@/lib/services/event-service';
 import type { Event, EventStatus, ActionResult } from '@/types/domain';
 import { revalidatePath } from 'next/cache';
 import { getUserId } from '@/lib/session';
+import { supabaseIntakeRepository } from '@/lib/repositories/supabase-intake-repository';
 
 async function getPlannerId(): Promise<string | null> {
     return getUserId();
@@ -43,7 +44,45 @@ export async function getEvent(id: string): Promise<Event | null> {
         return null;
     }
 
-    return eventService.getEvent(id, plannerId);
+    const event = await eventService.getEvent(id, plannerId);
+    if (!event?.submissionId) {
+        return event;
+    }
+
+    const intake = await supabaseIntakeRepository.findById(event.submissionId);
+    if (!intake) {
+        return event;
+    }
+
+    const combinedNotes = [
+        event.notes,
+        intake.specialRequests,
+        intake.food?.specialRequests,
+        intake.decor?.specialRequests,
+        intake.entertainment?.specialRequests,
+        intake.photography?.specialRequests,
+        intake.services?.specialRequests,
+    ]
+        .filter((value): value is string => Boolean(value && value.trim()))
+        .join('\n\n');
+
+    return {
+        ...event,
+        city: event.city || intake.city || '',
+        venueName: event.venueName || intake.personalVenue?.name || undefined,
+        venueAddress: event.venueAddress || intake.personalVenue?.address || undefined,
+        notes: combinedNotes || undefined,
+        requirements: {
+            personalVenue: intake.personalVenue,
+            food: intake.food,
+            decor: intake.decor,
+            entertainment: intake.entertainment,
+            photography: intake.photography,
+            services: intake.services,
+            likedVendors: intake.likedVendors,
+            specialRequests: intake.specialRequests,
+        },
+    } as Event;
 }
 
 /**
