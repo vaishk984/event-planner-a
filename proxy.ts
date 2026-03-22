@@ -12,29 +12,36 @@ import { createServerClient } from '@supabase/ssr'
  * 4. Adds security headers to all responses
  */
 
-// Routes that require an authenticated session
-const PROTECTED_PREFIXES = ['/planner', '/vendor', '/admin']
+const PROTECTED_EXACT_PATHS = ['/']
+const PROTECTED_PREFIXES = ['/planner', '/vendor', '/admin', '/capture']
 
-// Routes that are always public (no session check needed)
-const PUBLIC_PREFIXES = [
+const PUBLIC_EXACT_PATHS = [
     '/login',
     '/signup',
     '/forgot-password',
-    '/showroom',
-    '/client',
-    '/portal',
-    '/intake',
-    '/capture',
-    '/api',
     '/forbidden',
     '/privacy',
     '/terms',
     '/logout',
+]
+
+const PUBLIC_PREFIXES = [
+    '/showroom',
+    '/client',
+    '/portal',
+    '/intake',
+    '/api',
     '/_next',
 ]
 
+function isPublicRoute(pathname: string): boolean {
+    return PUBLIC_EXACT_PATHS.includes(pathname)
+        || PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+}
+
 function isProtectedRoute(pathname: string): boolean {
-    return PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+    return PROTECTED_EXACT_PATHS.includes(pathname)
+        || PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix))
 }
 
 export default async function proxy(request: NextRequest) {
@@ -47,7 +54,7 @@ export default async function proxy(request: NextRequest) {
     // package clears the auth cookies via setAll(). When the user navigates back
     // to a protected route, the session is gone and they must re-login.
     // This was the root cause of the "re-login after visiting Showroom" bug.
-    if (!isProtectedRoute(pathname)) {
+    if (isPublicRoute(pathname) || !isProtectedRoute(pathname)) {
         const response = NextResponse.next({ request })
         addSecurityHeaders(response)
         return response
