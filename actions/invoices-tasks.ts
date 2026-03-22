@@ -83,30 +83,70 @@ export async function createInvoice(formData: {
     const platformFee = Math.round(subtotal * 0.02)
     const total = subtotal + platformFee
 
-    // Insert invoice
-    const { data: invoice, error: invoiceError } = await supabase
-        .from('invoices')
-        .insert({
-            event_id: formData.eventId,
-            planner_id: userId,
-            invoice_number: invoiceNumber,
-            client_name: formData.clientName,
-            client_email: formData.clientEmail || '',
-            client_phone: formData.clientPhone || '',
-            due_date: formData.dueDate || null,
-            subtotal,
-            platform_fee: platformFee,
-            total,
-            notes: formData.notes || '',
-        })
-        .select()
-        .single()
+    // Accept both yyyy-mm-dd and dd-mm-yyyy date formats from UI/input.
+    const dueDateRaw = (formData.dueDate || '').trim()
+    const dueDate = /^\d{2}-\d{2}-\d{4}$/.test(dueDateRaw)
+        ? `${dueDateRaw.slice(6, 10)}-${dueDateRaw.slice(3, 5)}-${dueDateRaw.slice(0, 2)}`
+        : (dueDateRaw || null)
+
+    // Insert invoice with compatibility fallback for legacy schemas.
+    const insertPayload: Record<string, any> = {
+        event_id: formData.eventId,
+        planner_id: userId,
+        invoice_number: invoiceNumber,
+        client_name: formData.clientName,
+        client_email: formData.clientEmail || '',
+        client_phone: formData.clientPhone || '',
+        due_date: dueDate,
+        subtotal,
+        platform_fee: platformFee,
+        total,
+        notes: formData.notes || '',
+        status: 'draft',
+    }
+
+    let invoice: any = null
+    let invoiceError: any = null
+
+    for (let attempt = 0; attempt < 8; attempt++) {
+        const result = await supabase
+            .from('invoices')
+            .insert(insertPayload)
+            .select()
+            .single()
+
+        invoice = result.data
+        invoiceError = result.error
+
+        if (!invoiceError && invoice) break
+
+        const message = invoiceError?.message || ''
+        const missingColumnMatch = message.match(/Could not find the '([^']+)' column/i)
+        if (missingColumnMatch) {
+            const missingColumn = missingColumnMatch[1]
+            delete insertPayload[missingColumn]
+            continue
+        }
+
+        // Older schemas may still require legacy columns.
+        if (message.includes('null value in column "amount"')) {
+            insertPayload.amount = total
+            continue
+        }
+        if (message.includes('null value in column "type"')) {
+            insertPayload.type = 'service'
+            continue
+        }
+
+        break
+    }
 
     if (invoiceError || !invoice) {
         logger.error('Failed to create invoice', {
             invoiceError,
             eventId: formData.eventId,
             plannerId: userId,
+            payloadKeys: Object.keys(insertPayload),
         })
         return { error: invoiceError?.message || 'Failed to create invoice' }
     }
