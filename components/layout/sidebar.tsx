@@ -98,6 +98,7 @@ export function Sidebar({ userEmail = 'planner@example.com' }: SidebarProps) {
 
                 <Link
                     href="/logout"
+                    prefetch={false}
                     className={cn(
                         "flex items-center gap-2 w-full px-4 py-2 text-sm text-red-500 hover:bg-red-50 rounded-lg transition-colors overflow-hidden whitespace-nowrap",
                         isCollapsed && "justify-center px-2"

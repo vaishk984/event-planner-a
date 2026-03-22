@@ -99,6 +99,7 @@ export function AdminLayoutWrapper({
                 <div className="p-4 border-t border-slate-700">
                     <Link
                         href="/logout"
+                        prefetch={false}
                         onClick={() => setIsMobileMenuOpen(false)}
                         className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 transition-colors"
                     >
