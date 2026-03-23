@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { supabaseIntakeRepository } from '@/lib/repositories/supabase-intake-repository'
 import { supabaseEventRepository } from '@/lib/repositories/supabase-event-repository'
 import { getCurrentUser } from '@/actions/auth/login'
+import { createInitialInvoiceForEvent } from '@/actions/invoices-tasks'
 import type { Intake, Event, ActionResult } from '@/types/domain'
 
 // ============================================
@@ -163,9 +164,19 @@ export async function convertIntakeToEvent(intakeId: string): Promise<ActionResu
     const eventResult = await supabaseEventRepository.create(eventData as unknown as Omit<Event, 'id' | 'createdAt' | 'updatedAt'>)
 
     if (eventResult.success && eventResult.data) {
+        await createInitialInvoiceForEvent({
+            eventId: eventResult.data.id,
+            eventName: eventResult.data.name,
+            clientName: eventResult.data.clientName,
+            clientEmail: eventResult.data.clientEmail,
+            clientPhone: eventResult.data.clientPhone,
+            budgetMax: eventResult.data.budgetMax,
+            eventDate: eventResult.data.date,
+        })
         await supabaseIntakeRepository.markConverted(intakeId, eventResult.data.id)
         revalidatePath('/planner/events')
         revalidatePath('/planner/leads')
+        revalidatePath('/planner/invoices')
     }
 
     return eventResult

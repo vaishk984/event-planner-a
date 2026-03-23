@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { getUserId } from '@/lib/session'
 import { eventService } from '@/lib/services/event-service'
 import type { EventType, VenueType } from '@/types/domain'
+import { createInitialInvoiceForEvent } from '@/actions/invoices-tasks'
 
 export async function createEvent(formData: FormData) {
     const userId = await getUserId()
@@ -69,6 +70,19 @@ export async function createEvent(formData: FormData) {
         return { error: result.error }
     }
 
+    if (result.data) {
+        await createInitialInvoiceForEvent({
+            eventId: result.data.id,
+            eventName: result.data.name,
+            clientName: result.data.clientName,
+            clientEmail: result.data.clientEmail,
+            clientPhone: result.data.clientPhone,
+            budgetMax: result.data.budgetMax,
+            eventDate: result.data.date,
+        })
+    }
+
     revalidatePath('/planner/events')
+    revalidatePath('/planner/invoices')
     redirect('/planner/events')
 }

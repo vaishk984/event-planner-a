@@ -265,6 +265,68 @@ export async function createInvoice(formData: {
     return { success: true, invoice }
 }
 
+export async function createInitialInvoiceForEvent(input: {
+    eventId: string
+    eventName?: string
+    clientName?: string
+    clientEmail?: string
+    clientPhone?: string
+    budgetMax?: number
+    eventDate?: string
+}) {
+    const supabase = await createClient()
+    const userId = await getUserId()
+    if (!userId) return { error: 'Unauthorized' }
+
+    // Avoid creating duplicate seed invoices for the same event.
+    let existingCount = 0
+    const { count, error } = await supabase
+        .from('invoices')
+        .select('*', { count: 'exact', head: true })
+        .eq('event_id', input.eventId)
+        .eq('planner_id', userId)
+
+    if (!error) {
+        existingCount = count || 0
+    } else if (getMissingColumnFromError(error) === 'planner_id') {
+        // Legacy schema fallback.
+        const { count: fallbackCount } = await supabase
+            .from('invoices')
+            .select('*', { count: 'exact', head: true })
+            .eq('event_id', input.eventId)
+        existingCount = fallbackCount || 0
+    }
+
+    if (existingCount > 0) {
+        return { success: true, skipped: true }
+    }
+
+    const budget = Math.max(0, Math.round(Number(input.budgetMax || 0)))
+    const dueDate = input.eventDate && /^\d{4}-\d{2}-\d{2}/.test(input.eventDate)
+        ? input.eventDate.slice(0, 10)
+        : undefined
+
+    const result = await createInvoice({
+        eventId: input.eventId,
+        clientName: input.clientName?.trim() || 'Client',
+        clientEmail: input.clientEmail?.trim() || '',
+        clientPhone: input.clientPhone?.trim() || '',
+        dueDate,
+        notes: 'Auto-generated initial invoice from event creation.',
+        items: [
+            {
+                description: input.eventName
+                    ? `Initial estimate for ${input.eventName}`
+                    : 'Initial estimate',
+                quantity: 1,
+                rate: budget,
+            },
+        ],
+    })
+
+    return result
+}
+
 export async function updateInvoiceStatus(invoiceId: string, status: string) {
     const supabase = await createClient()
     const userId = await getUserId()
