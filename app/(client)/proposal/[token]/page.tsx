@@ -7,8 +7,8 @@ import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import {
     Building2, UtensilsCrossed, Camera, Sparkles, Music, Brush, Car,
-    Calendar, Users, MapPin, Check, IndianRupee, Star, Phone, Mail,
-    MessageCircle, Download, CheckCircle2, Heart, Clock, Shield, Loader2
+    Calendar, Users, MapPin, Check, Star, Phone, Mail,
+    MessageCircle, Download, Heart, Clock, Shield, Loader2
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getPublicProposalDetails, updateProposalStatus, getFinalProposal, updateFinalProposalStatus } from '@/actions/client-portal'
@@ -185,33 +185,6 @@ export default function ClientProposalPage({ params }: { params: Promise<{ token
         )
     }
 
-    if (approved) {
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-emerald-50 flex items-center justify-center p-4">
-                <Card className="max-w-md w-full text-center">
-                    <CardContent className="py-12">
-                        <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-6">
-                            <CheckCircle2 className="w-10 h-10 text-green-600" />
-                        </div>
-                        <h2 className="text-2xl font-bold text-gray-900 mb-2">Proposal Approved!</h2>
-                        <p className="text-gray-600 mb-6">
-                            Thank you for approving the proposal for {proposal.eventName}.
-                            Your planner will contact you shortly with next steps.
-                        </p>
-                        <div className="flex items-center justify-center gap-4">
-                            <Button variant="outline" className="gap-2">
-                                <Phone className="w-4 h-4" /> Call Planner
-                            </Button>
-                            <Button variant="outline" className="gap-2">
-                                <Mail className="w-4 h-4" /> Email
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-        )
-    }
-
     return (
         <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-rose-50">
             {/* Header */}
@@ -256,6 +229,22 @@ export default function ClientProposalPage({ params }: { params: Promise<{ token
 
             {/* Main Content */}
             <div className="max-w-5xl mx-auto px-4 py-12">
+                {approved && (
+                    <Card className="mb-8 border-green-200 bg-gradient-to-r from-green-50 to-emerald-50">
+                        <CardContent className="py-5">
+                            <div className="flex items-center justify-between gap-4">
+                                <div>
+                                    <p className="font-semibold text-green-800">Proposal Approved</p>
+                                    <p className="text-sm text-green-700">
+                                        Thank you for approving this proposal. Your planner will contact you shortly.
+                                    </p>
+                                </div>
+                                <Badge className="bg-green-100 text-green-700 border border-green-200">Approved</Badge>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+
                 {/* Personal Message */}
                 <Card className="mb-8 bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200">
                     <CardContent className="py-6">
@@ -404,13 +393,17 @@ export default function ClientProposalPage({ params }: { params: Promise<{ token
                 {/* Actions */}
                 <div className="sticky bottom-0 bg-white/95 backdrop-blur-sm border-t -mx-4 px-4 py-4">
                     <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
-                        <Button
-                            variant="outline"
-                            className="gap-2"
-                            onClick={() => setShowFeedback(!showFeedback)}
-                        >
-                            <MessageCircle className="w-4 h-4" /> Request Changes
-                        </Button>
+                        <div>
+                            {!approved && (
+                                <Button
+                                    variant="outline"
+                                    className="gap-2"
+                                    onClick={() => setShowFeedback(!showFeedback)}
+                                >
+                                    <MessageCircle className="w-4 h-4" /> Request Changes
+                                </Button>
+                            )}
+                        </div>
                         <div className="flex gap-3">
                             <Button variant="outline" className="gap-2" onClick={() => window.print()}>
                                 <Download className="w-4 h-4" /> Download PDF
@@ -419,10 +412,12 @@ export default function ClientProposalPage({ params }: { params: Promise<{ token
                                 size="lg"
                                 className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 gap-2 px-8"
                                 onClick={handleApprove}
-                                disabled={approving}
+                                disabled={approving || approved}
                             >
                                 {approving ? (
                                     <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Approving...</>
+                                ) : approved ? (
+                                    <><Check className="w-5 h-5" /> Approved</>
                                 ) : (
                                     <><Check className="w-5 h-5" /> Approve Proposal</>
                                 )}

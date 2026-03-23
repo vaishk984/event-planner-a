@@ -451,17 +451,21 @@ export async function updateInvoiceStatus(invoiceId: string, status: string) {
         if (inv) updateData.paid_amount = inv.total ?? inv.amount ?? 0
     }
 
-    let { error } = await supabase
+    let { data: updatedRows, error } = await supabase
         .from('invoices')
         .update(updateData)
         .eq('id', invoiceId)
         .eq('planner_id', userId)
+        .select('id')
+        .limit(1)
 
-    if (getMissingColumnFromError(error) === 'planner_id') {
+    const needsOwnershipFallback = getMissingColumnFromError(error) === 'planner_id' || (!error && (updatedRows || []).length === 0)
+
+    if (needsOwnershipFallback) {
         // Legacy schema path: ensure ownership via joined events, then update by id.
         const { data: ownership, error: ownershipError } = await supabase
             .from('invoices')
-            .select('id, events!inner(planner_id)')
+            .select('id, event_id, events!inner(planner_id)')
             .eq('id', invoiceId)
             .eq('events.planner_id', userId)
             .single()
@@ -480,6 +484,9 @@ export async function updateInvoiceStatus(invoiceId: string, status: string) {
                 .from('invoices')
                 .update(compatibilityUpdate)
                 .eq('id', invoiceId)
+                .select('id')
+                .limit(1)
+            updatedRows = result.data
             error = result.error
             if (!error) break
             const missing = getMissingColumnFromError(error)
@@ -494,6 +501,10 @@ export async function updateInvoiceStatus(invoiceId: string, status: string) {
     if (error) {
         logger.error('Failed to update invoice status', error)
         return { error: 'Failed to update invoice' }
+    }
+
+    if ((updatedRows || []).length === 0) {
+        return { error: 'Invoice not found or not accessible' }
     }
 
     revalidatePath('/planner/invoices')

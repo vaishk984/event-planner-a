@@ -59,6 +59,7 @@ export default function InvoicesPage() {
     const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
     const [searchQuery, setSearchQuery] = useState('')
     const [sending, setSending] = useState(false)
+    const [exporting, setExporting] = useState(false)
     const [showCreateDialog, setShowCreateDialog] = useState(false)
 
     useEffect(() => {
@@ -95,6 +96,8 @@ export default function InvoicesPage() {
             toast.success(`Invoice sent to ${selectedInvoice.client_email || 'client'}`)
             await fetchInvoices()
             setSelectedInvoice({ ...selectedInvoice, status: 'sent' })
+        } else {
+            toast.error(result.error || 'Failed to send invoice')
         }
         setSending(false)
     }
@@ -106,8 +109,105 @@ export default function InvoicesPage() {
             toast.success('Invoice marked as paid')
             await fetchInvoices()
             setSelectedInvoice({ ...selectedInvoice, status: 'paid', paid_amount: selectedInvoice.total })
+        } else {
+            toast.error(result.error || 'Failed to update invoice status')
         }
     }
+
+    const buildInvoicePrintHtml = (invoice: Invoice) => {
+        const created = new Date(invoice.created_at).toLocaleDateString('en-IN')
+        const due = invoice.due_date ? new Date(invoice.due_date).toLocaleDateString('en-IN') : 'N/A'
+
+        return `<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>${invoice.invoice_number}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 32px; color: #111827; }
+        .header { display: flex; justify-content: space-between; align-items: start; border-bottom: 2px solid #6366f1; padding-bottom: 12px; margin-bottom: 20px; }
+        .title { font-size: 30px; font-weight: 700; color: #4f46e5; margin: 0; }
+        .meta { color: #6b7280; font-size: 13px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 20px; }
+        .label { color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+        .value { font-size: 16px; font-weight: 600; }
+        .totals { margin-left: auto; width: 320px; }
+        .row { display: flex; justify-content: space-between; padding: 6px 0; color: #374151; }
+        .grand { border-top: 1px solid #e5e7eb; margin-top: 8px; padding-top: 10px; font-size: 22px; font-weight: 700; color: #111827; }
+        .status { margin-top: 16px; font-size: 13px; color: #4b5563; }
+        @media print { body { margin: 20px; } }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1 class="title">INVOICE</h1>
+            <div class="meta">${invoice.invoice_number}</div>
+        </div>
+        <div class="meta">Created: ${created}<br/>Due: ${due}</div>
+    </div>
+
+    <div class="grid">
+        <div>
+            <div class="label">Bill To</div>
+            <div class="value">${invoice.client_name || 'Client'}</div>
+            <div class="meta">${invoice.client_email || ''}</div>
+        </div>
+        <div style="text-align:right">
+            <div class="label">Event</div>
+            <div class="value">${invoice.events?.name || 'Event'}</div>
+        </div>
+    </div>
+
+    <div class="totals">
+        <div class="row"><span>Subtotal</span><span>₹${(invoice.subtotal || 0).toLocaleString('en-IN')}</span></div>
+        <div class="row"><span>Platform Fee (2%)</span><span>₹${(invoice.platform_fee || 0).toLocaleString('en-IN')}</span></div>
+        <div class="row grand"><span>Total</span><span>₹${(invoice.total || 0).toLocaleString('en-IN')}</span></div>
+        <div class="status">Status: ${getStatusLabel(invoice.status)}</div>
+    </div>
+</body>
+</html>`
+    }
+
+    const openInvoicePrintDialog = (invoice: Invoice, pdfMode: boolean) => {
+        const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=1000,height=800')
+        if (!printWindow) {
+            toast.error('Popup blocked. Please allow popups to print or download PDF.')
+            setExporting(false)
+            return
+        }
+
+        printWindow.document.open()
+        printWindow.document.write(buildInvoicePrintHtml(invoice))
+        printWindow.document.close()
+
+        printWindow.onload = () => {
+            printWindow.focus()
+            printWindow.print()
+            if (pdfMode) {
+                toast.success('Print dialog opened. Choose "Save as PDF" as destination.')
+            }
+            setExporting(false)
+        }
+    }
+
+    const handlePrintInvoice = () => {
+        if (!selectedInvoice) return
+        setExporting(true)
+        openInvoicePrintDialog(selectedInvoice, false)
+    }
+
+    const handleDownloadPdf = () => {
+        if (!selectedInvoice) return
+        setExporting(true)
+        openInvoicePrintDialog(selectedInvoice, true)
+    }
+
+    useEffect(() => {
+        if (selectedInvoice) {
+            setExporting(false)
+        }
+    }, [selectedInvoice?.id])
 
     if (loading) {
         return (
@@ -268,10 +368,22 @@ export default function InvoicesPage() {
                                         <div className="text-indigo-100 text-sm">{selectedInvoice.invoice_number}</div>
                                     </div>
                                     <div className="flex gap-2">
-                                        <Button variant="outline" size="sm" className="bg-white/10 border-white/20 text-white hover:bg-white/20">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                                            onClick={handlePrintInvoice}
+                                            disabled={exporting}
+                                        >
                                             <Printer className="w-4 h-4 mr-1" /> Print
                                         </Button>
-                                        <Button variant="outline" size="sm" className="bg-white/10 border-white/20 text-white hover:bg-white/20">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                                            onClick={handleDownloadPdf}
+                                            disabled={exporting}
+                                        >
                                             <Download className="w-4 h-4 mr-1" /> PDF
                                         </Button>
                                     </div>
