@@ -12,6 +12,19 @@ function getMissingColumnFromError(error: unknown): string | null {
     return match ? match[1] : null
 }
 
+function normalizeInvoiceRow(row: any, eventName?: string) {
+    return {
+        ...row,
+        subtotal: row.subtotal ?? row.amount ?? 0,
+        platform_fee: row.platform_fee ?? 0,
+        total: row.total ?? row.amount ?? 0,
+        paid_amount: row.paid_amount ?? 0,
+        events: row.events
+            ? (Array.isArray(row.events) ? row.events[0] : row.events)
+            : (eventName ? { name: eventName } : undefined),
+    }
+}
+
 // ============================================================================
 // INVOICE ACTIONS
 // ============================================================================
@@ -27,43 +40,54 @@ export async function getInvoices() {
         .eq('planner_id', userId)
         .order('created_at', { ascending: false })
 
-    if (error) {
-        // Legacy schema may not have planner_id on invoices; filter via events instead.
-        if (getMissingColumnFromError(error) === 'planner_id') {
-            const { data: legacyData, error: legacyError } = await supabase
-                .from('invoices')
-                .select('*, events!inner(name, planner_id)')
-                .eq('events.planner_id', userId)
-                .order('created_at', { ascending: false })
-
-            if (legacyError) {
-                logger.error('Failed to fetch invoices (legacy fallback)', legacyError)
-                return { data: [] }
-            }
-
-            const normalized = (legacyData || []).map((row: any) => ({
-                ...row,
-                subtotal: row.subtotal ?? row.amount ?? 0,
-                platform_fee: row.platform_fee ?? 0,
-                total: row.total ?? row.amount ?? 0,
-                paid_amount: row.paid_amount ?? 0,
-                events: row.events ? { name: row.events.name } : undefined,
-            }))
-
-            return { data: normalized }
-        }
-
+    if (error && getMissingColumnFromError(error) !== 'planner_id') {
         logger.error('Failed to fetch invoices with join', error)
-        return { data: [] }
     }
 
-    const normalized = (data || []).map((row: any) => ({
-        ...row,
-        subtotal: row.subtotal ?? row.amount ?? 0,
-        platform_fee: row.platform_fee ?? 0,
-        total: row.total ?? row.amount ?? 0,
-        paid_amount: row.paid_amount ?? 0,
-    }))
+    // Fallback path: always fetch planner-owned events, then invoices by event_id.
+    // This covers legacy rows where planner_id is missing or null.
+    const { data: ownedEvents, error: eventsError } = await supabase
+        .from('events')
+        .select('id, name')
+        .eq('planner_id', userId)
+
+    if (eventsError) {
+        logger.error('Failed to fetch planner events for invoice fallback', eventsError)
+    }
+
+    const eventIds = (ownedEvents || []).map(e => e.id)
+    const eventNameById = new Map((ownedEvents || []).map(e => [e.id, e.name]))
+
+    let fallbackData: any[] = []
+    if (eventIds.length > 0) {
+        const { data: byEventData, error: byEventError } = await supabase
+            .from('invoices')
+            .select('*')
+            .in('event_id', eventIds)
+            .order('created_at', { ascending: false })
+
+        if (byEventError) {
+            logger.error('Failed to fetch invoices by owned events', byEventError)
+        } else {
+            fallbackData = byEventData || []
+        }
+    }
+
+    const merged = [...(data || []), ...fallbackData]
+    const dedupedById = new Map<string, any>()
+    for (const row of merged) {
+        if (row?.id && !dedupedById.has(row.id)) dedupedById.set(row.id, row)
+    }
+
+    const normalized = Array.from(dedupedById.values()).map((row: any) =>
+        normalizeInvoiceRow(row, eventNameById.get(row.event_id))
+    )
+
+    normalized.sort((a: any, b: any) => {
+        const aTs = a?.created_at ? new Date(a.created_at).getTime() : 0
+        const bTs = b?.created_at ? new Date(b.created_at).getTime() : 0
+        return bTs - aTs
+    })
 
     return { data: normalized }
 }
@@ -96,13 +120,7 @@ export async function getInvoicesByEvent(eventId: string) {
                 return { data: [] }
             }
 
-            const normalized = (legacyData || []).map((row: any) => ({
-                ...row,
-                subtotal: row.subtotal ?? row.amount ?? 0,
-                platform_fee: row.platform_fee ?? 0,
-                total: row.total ?? row.amount ?? 0,
-                paid_amount: row.paid_amount ?? 0,
-            }))
+            const normalized = (legacyData || []).map((row: any) => normalizeInvoiceRow(row))
 
             return { data: normalized }
         }
@@ -111,13 +129,29 @@ export async function getInvoicesByEvent(eventId: string) {
         return { data: [] }
     }
 
-    const normalized = (data || []).map((row: any) => ({
-        ...row,
-        subtotal: row.subtotal ?? row.amount ?? 0,
-        platform_fee: row.platform_fee ?? 0,
-        total: row.total ?? row.amount ?? 0,
-        paid_amount: row.paid_amount ?? 0,
-    }))
+    // If planner_id filter returns empty due legacy null values, verify ownership by event and retry.
+    if ((data || []).length === 0) {
+        const { data: event, error: eventError } = await supabase
+            .from('events')
+            .select('id')
+            .eq('id', eventId)
+            .eq('planner_id', userId)
+            .single()
+
+        if (!eventError && event) {
+            const { data: byEventRows, error: byEventError } = await supabase
+                .from('invoices')
+                .select('*, invoice_items(*)')
+                .eq('event_id', eventId)
+                .order('created_at', { ascending: false })
+
+            if (!byEventError) {
+                return { data: (byEventRows || []).map((row: any) => normalizeInvoiceRow(row)) }
+            }
+        }
+    }
+
+    const normalized = (data || []).map((row: any) => normalizeInvoiceRow(row))
 
     return { data: normalized }
 }
