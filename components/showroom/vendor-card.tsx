@@ -60,7 +60,11 @@ export function VendorCard({ vendor }: VendorCardProps) {
                             {vendor.startPrice.toLocaleString()}
                         </div>
                     </div>
-                    <Link href={`/showroom/vendor/${vendor.id}`}>
+                    <Link
+                        href={`/showroom/vendor/${vendor.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
                         <button className="px-4 py-2 bg-gray-900 text-white text-xs font-medium rounded-lg hover:bg-gray-800 transition-colors">
                             View Details
                         </button>

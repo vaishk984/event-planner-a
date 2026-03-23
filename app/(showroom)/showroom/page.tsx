@@ -96,7 +96,12 @@ export default function ShowroomHome() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {CATEGORIES.map((cat) => (
-                    <Link href={`/showroom/browse/${cat.id}`} key={cat.id}>
+                    <Link
+                        href={`/showroom/browse/${cat.id}`}
+                        key={cat.id}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
                         <Card className="group overflow-hidden border-0 shadow-lg hover:shadow-2xl transition-all duration-300 h-[300px] relative cursor-pointer">
                             {/* Background Image */}
                             <div className="absolute inset-0">

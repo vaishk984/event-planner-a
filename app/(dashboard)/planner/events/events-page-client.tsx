@@ -247,7 +247,7 @@ export default function EventsPageClient({
                     </p>
                 </div>
                 <div className="flex gap-3">
-                    <Link href="/capture">
+                    <Link href="/capture" target="_blank" rel="noopener noreferrer">
                         <Button variant="outline" className="gap-2">
                             <Plus className="w-4 h-4" /> Capture
                         </Button>

@@ -138,10 +138,18 @@ export default function ProposalPreviewPage() {
         try {
             setApproving(true)
 
-            const proposedResult = await updateEventStatus(eventId, 'proposed')
-            if (!proposedResult.success) {
-                alert(`Failed to prepare proposal approval: ${proposedResult.error}`)
+            // If already approved, don't attempt an invalid Approved -> Proposed transition.
+            if (event?.status === 'approved') {
+                router.push(`/planner/events/${eventId}`)
                 return
+            }
+
+            if (event?.status !== 'proposed') {
+                const proposedResult = await updateEventStatus(eventId, 'proposed')
+                if (!proposedResult.success) {
+                    alert(`Failed to prepare proposal approval: ${proposedResult.error}`)
+                    return
+                }
             }
 
             // Now approve the event

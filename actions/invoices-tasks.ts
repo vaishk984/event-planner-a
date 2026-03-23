@@ -25,6 +25,43 @@ function normalizeInvoiceRow(row: any, eventName?: string) {
     }
 }
 
+function computeBookingSubtotal(bookings: any[], guestCountByEvent: Map<string, number>) {
+    const totals = new Map<string, number>()
+
+    for (const booking of bookings) {
+        const eventId = String(booking.event_id || '')
+        if (!eventId) continue
+
+        const amountRaw = Number(booking.quoted_amount ?? booking.budget ?? 0)
+        if (!Number.isFinite(amountRaw) || amountRaw <= 0) continue
+
+        const serviceKey = String(booking.service || '').toLowerCase()
+        const isCatering = serviceKey.includes('cater') || serviceKey.includes('food')
+        const guestCount = guestCountByEvent.get(eventId) || 0
+
+        const amount = (isCatering && guestCount > 0 && amountRaw <= 10000)
+            ? amountRaw * guestCount
+            : amountRaw
+
+        totals.set(eventId, (totals.get(eventId) || 0) + amount)
+    }
+
+    return totals
+}
+
+function normalizeBudgetRupees(raw: unknown): number {
+    const value = Number(raw)
+    if (!Number.isFinite(value) || value <= 0) return 0
+
+    // Some capture/event flows store budget in lakh units (e.g. 5 -> 5,00,000).
+    if (value <= 1000) return Math.round(value * 100000)
+
+    // Defensive guard for accidental paise-like values in edge imports.
+    if (value >= 20000000 && Number.isInteger(value)) return Math.round(value / 100)
+
+    return Math.round(value)
+}
+
 // ============================================================================
 // INVOICE ACTIONS
 // ============================================================================
@@ -48,7 +85,7 @@ export async function getInvoices() {
     // This covers legacy rows where planner_id is missing or null.
     const { data: ownedEvents, error: eventsError } = await supabase
         .from('events')
-        .select('id, name')
+        .select('id, name, guest_count')
         .eq('planner_id', userId)
 
     if (eventsError) {
@@ -57,6 +94,18 @@ export async function getInvoices() {
 
     const eventIds = (ownedEvents || []).map(e => e.id)
     const eventNameById = new Map((ownedEvents || []).map(e => [e.id, e.name]))
+    const guestCountByEvent = new Map((ownedEvents || []).map(e => [e.id, Number(e.guest_count || 0)]))
+
+    let bookingTotalsByEvent = new Map<string, number>()
+    if (eventIds.length > 0) {
+        const { data: bookingRows } = await supabase
+            .from('booking_requests')
+            .select('event_id, service, quoted_amount, budget')
+            .in('event_id', eventIds)
+            .in('status', ['accepted', 'confirmed'])
+
+        bookingTotalsByEvent = computeBookingSubtotal(bookingRows || [], guestCountByEvent)
+    }
 
     let fallbackData: any[] = []
     if (eventIds.length > 0) {
@@ -79,9 +128,27 @@ export async function getInvoices() {
         if (row?.id && !dedupedById.has(row.id)) dedupedById.set(row.id, row)
     }
 
-    const normalized = Array.from(dedupedById.values()).map((row: any) =>
-        normalizeInvoiceRow(row, eventNameById.get(row.event_id))
-    )
+    const normalized = Array.from(dedupedById.values()).map((row: any) => {
+        const normalizedRow = normalizeInvoiceRow(row, eventNameById.get(row.event_id))
+        const bookingSubtotal = bookingTotalsByEvent.get(row.event_id)
+        const currentTotal = Number(normalizedRow.total || 0)
+
+        const suspiciousScale = bookingSubtotal
+            ? currentTotal >= bookingSubtotal * 2
+            : false
+
+        const missingPlatformFee = Number(normalizedRow.platform_fee || 0) === 0
+
+        if (bookingSubtotal && (suspiciousScale || missingPlatformFee)) {
+            const correctedSubtotal = Math.round(bookingSubtotal)
+            const correctedPlatformFee = Math.round(correctedSubtotal * 0.02)
+            normalizedRow.subtotal = correctedSubtotal
+            normalizedRow.platform_fee = correctedPlatformFee
+            normalizedRow.total = correctedSubtotal + correctedPlatformFee
+        }
+
+        return normalizedRow
+    })
 
     normalized.sort((a: any, b: any) => {
         const aTs = a?.created_at ? new Date(a.created_at).getTime() : 0
@@ -301,7 +368,44 @@ export async function createInitialInvoiceForEvent(input: {
         return { success: true, skipped: true }
     }
 
-    const budget = Math.max(0, Math.round(Number(input.budgetMax || 0)))
+    let guestCount = 0
+    let eventBudget = normalizeBudgetRupees(input.budgetMax)
+    const { data: eventRow } = await supabase
+        .from('events')
+        .select('guest_count, budget_max')
+        .eq('id', input.eventId)
+        .single()
+
+    if (eventRow) {
+        guestCount = Number((eventRow as { guest_count?: number }).guest_count || 0)
+        eventBudget = normalizeBudgetRupees((eventRow as { budget_max?: number }).budget_max ?? input.budgetMax)
+    }
+
+    const { data: bookings } = await supabase
+        .from('booking_requests')
+        .select('service, quoted_amount, budget, status')
+        .eq('event_id', input.eventId)
+        .in('status', ['accepted', 'confirmed'])
+
+    const subtotalFromBookings = (bookings || []).reduce((sum, booking: any) => {
+        const amountRaw = Number(booking.quoted_amount ?? booking.budget ?? 0)
+        if (!Number.isFinite(amountRaw) || amountRaw <= 0) return sum
+
+        const serviceKey = String(booking.service || '').toLowerCase()
+        const isCatering = serviceKey.includes('cater') || serviceKey.includes('food')
+
+        // If catering quote is likely per-plate, multiply by guest count.
+        const amount = (isCatering && guestCount > 0 && amountRaw <= 10000)
+            ? amountRaw * guestCount
+            : amountRaw
+
+        return sum + amount
+    }, 0)
+
+    const budget = subtotalFromBookings > 0
+        ? Math.round(subtotalFromBookings)
+        : eventBudget
+
     const dueDate = input.eventDate && /^\d{4}-\d{2}-\d{2}/.test(input.eventDate)
         ? input.eventDate.slice(0, 10)
         : undefined
