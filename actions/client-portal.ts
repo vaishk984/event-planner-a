@@ -321,20 +321,28 @@ export async function sendFinalProposal(eventId: string) {
     // Get current version count
     const { data: event } = await supabase
         .from('events')
-        .select('proposal_version')
+        .select('proposal_version, client_token')
         .eq('id', eventId)
         .eq('planner_id', session?.userId)
         .single()
 
     const newVersion = ((event as { proposal_version?: number })?.proposal_version || 0) + 1
 
+    const updatePayload: Record<string, any> = {
+        final_proposal_token: finalToken,
+        proposal_status: 'final',
+        proposal_version: newVersion,
+    }
+
+    // Older rows can have null client_token; public read policy depends on this column being present.
+    const eventWithClientToken = event as { client_token?: string | null } | null
+    if (!eventWithClientToken?.client_token) {
+        updatePayload.client_token = crypto.randomUUID()
+    }
+
     const { error } = await supabase
         .from('events')
-        .update({
-            final_proposal_token: finalToken,
-            proposal_status: 'final',
-            proposal_version: newVersion,
-        })
+        .update(updatePayload)
         .eq('id', eventId)
         .eq('planner_id', session?.userId)
 
@@ -602,7 +610,23 @@ export async function getFinalProposal(token: string) {
         .eq('final_proposal_token', cleanToken)
         .single()
 
-    if (error || !event) {
+    let resolvedEvent = event
+    if (error || !resolvedEvent) {
+        // Compatibility fallback: if a non-final token was opened under /proposal/final_*, try public token too.
+        const { data: byPublicToken } = await supabase
+            .from('events')
+            .select(`
+                id, name, date, venue_name, venue_address, type,
+                guest_count, budget_max, proposal_status,
+                planner_id
+            `)
+            .eq('public_token', cleanToken)
+            .single()
+
+        resolvedEvent = byPublicToken
+    }
+
+    if (!resolvedEvent) {
         return { error: 'Final proposal not found' }
     }
 
@@ -610,7 +634,7 @@ export async function getFinalProposal(token: string) {
     const { data: planner } = await supabase
         .from('planner_profiles')
         .select('business_name, phone')
-        .eq('user_id', event.planner_id)
+        .eq('user_id', resolvedEvent.planner_id)
         .single()
 
     const { data: bookings } = await supabase
@@ -619,13 +643,13 @@ export async function getFinalProposal(token: string) {
             id, service, status, budget, quoted_amount, notes,
             vendors:vendor_id (business_name, rating, category)
         `)
-        .eq('event_id', event.id)
+        .eq('event_id', resolvedEvent.id)
         .in('status', ['accepted', 'confirmed'])
 
     const { data: timeline } = await supabase
         .from('timeline_items')
         .select('*')
-        .eq('event_id', event.id)
+        .eq('event_id', resolvedEvent.id)
         .order('start_time', { ascending: true })
 
     const categoryIconMap: Record<string, string> = {
@@ -645,8 +669,8 @@ export async function getFinalProposal(token: string) {
             icon: categoryIconMap[serviceKey] || 'Sparkles',
             vendor: { name: vendor.business_name || 'Partner', rating: vendor.rating || 4.5 },
             price: b.quoted_amount || b.budget || 0,
-            perPlatePrice: isPerPlate ? (b.quoted_amount || b.budget || 0) / (event.guest_count || 1) : null,
-            guestCount: isPerPlate ? event.guest_count : null,
+            perPlatePrice: isPerPlate ? (b.quoted_amount || b.budget || 0) / (resolvedEvent.guest_count || 1) : null,
+            guestCount: isPerPlate ? resolvedEvent.guest_count : null,
             items: b.notes ? b.notes.split(',').map((s: string) => s.trim()) : [],
             status: b.status,
         }
@@ -661,18 +685,18 @@ export async function getFinalProposal(token: string) {
 
     return {
         proposal: {
-            eventName: event.name, date: event.date,
-            guestCount: event.guest_count,
-            city: event.venue_address || event.venue_name || '',
+            eventName: resolvedEvent.name, date: resolvedEvent.date,
+            guestCount: resolvedEvent.guest_count,
+            city: resolvedEvent.venue_address || resolvedEvent.venue_name || '',
             plannerName: planner?.business_name || 'Your Planner',
             plannerPhone: planner?.phone || '',
-            personalMessage: `Final proposal for your ${event.type || 'event'}.`,
+            personalMessage: `Final proposal for your ${resolvedEvent.type || 'event'}.`,
             categories, timeline: timelineFormatted,
-            status: event.proposal_status,
+            status: resolvedEvent.proposal_status,
             validUntil: 'Final Version',
             postApprovalNote: 'This is the final proposal. Upon approval, execution begins.',
         },
-        status: event.proposal_status,
+        status: resolvedEvent.proposal_status,
         error: null,
     }
 }
@@ -687,14 +711,40 @@ export async function updateFinalProposalStatus(token: string, status: string, f
     const updateData: { proposal_status: string; client_feedback?: string } = { proposal_status: status }
     if (feedback) updateData.client_feedback = feedback
 
-    const { error } = await supabase
+    const { data: updatedEvents, error } = await supabase
         .from('events')
         .update(updateData)
         .eq('final_proposal_token', cleanToken)
+        .select('id')
+        .limit(1)
 
     if (error) {
         console.error('Error updating final proposal status:', error)
         return { success: false, error: 'Failed to update' }
+    }
+
+    if ((updatedEvents || []).length > 0) {
+        return { success: true }
+    }
+
+    // Compatibility fallback: if this is actually a snapshot token, update snapshot status.
+    const snapshotUpdate: { status: string; client_feedback?: string } = { status }
+    if (feedback) snapshotUpdate.client_feedback = feedback
+
+    const { data: updatedSnapshots, error: snapshotError } = await supabase
+        .from('proposal_snapshots')
+        .update(snapshotUpdate)
+        .eq('token', cleanToken)
+        .select('id')
+        .limit(1)
+
+    if (snapshotError) {
+        console.error('Error updating final snapshot proposal status:', snapshotError)
+        return { success: false, error: 'Failed to update' }
+    }
+
+    if ((updatedSnapshots || []).length === 0) {
+        return { success: false, error: 'Final proposal not found' }
     }
 
     return { success: true }

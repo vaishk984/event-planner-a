@@ -14,6 +14,7 @@ import type { Event, EventStatus, ActionResult } from '@/types/domain';
 import { revalidatePath } from 'next/cache';
 import { getUserId } from '@/lib/session';
 import { supabaseIntakeRepository } from '@/lib/repositories/supabase-intake-repository';
+import { createInitialInvoiceForEvent } from '@/actions/invoices-tasks';
 
 async function getPlannerId(): Promise<string | null> {
     return getUserId();
@@ -165,8 +166,20 @@ export async function convertSubmissionToEvent(
     const result = await eventService.convertSubmissionToEvent(submissionId, plannerId);
 
     if (result.success) {
+        if (result.data) {
+            await createInitialInvoiceForEvent({
+                eventId: result.data.id,
+                eventName: result.data.name,
+                clientName: result.data.clientName,
+                clientEmail: result.data.clientEmail,
+                clientPhone: result.data.clientPhone,
+                budgetMax: result.data.budgetMax,
+                eventDate: result.data.date,
+            });
+        }
         revalidatePath('/planner/events');
         revalidatePath('/planner');
+        revalidatePath('/planner/invoices');
     }
 
     return result;
@@ -186,8 +199,20 @@ export async function createEvent(
     const result = await eventService.createEvent(data, plannerId);
 
     if (result.success) {
+        if (result.data) {
+            await createInitialInvoiceForEvent({
+                eventId: result.data.id,
+                eventName: result.data.name,
+                clientName: result.data.clientName,
+                clientEmail: result.data.clientEmail,
+                clientPhone: result.data.clientPhone,
+                budgetMax: result.data.budgetMax,
+                eventDate: result.data.date,
+            });
+        }
         revalidatePath('/planner/events');
         revalidatePath('/planner');
+        revalidatePath('/planner/invoices');
     }
 
     return result;
