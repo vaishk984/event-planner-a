@@ -30,9 +30,21 @@ const PUBLIC_PREFIXES = [
     '/client',
     '/portal',
     '/intake',
-    '/api',
     '/_next',
 ]
+
+const PUBLIC_API_EXACT_PATHS = [
+    '/api/auth/login',
+    '/api/v1/health',
+]
+
+function isApiRoute(pathname: string): boolean {
+    return pathname.startsWith('/api/')
+}
+
+function isPublicApiRoute(pathname: string): boolean {
+    return PUBLIC_API_EXACT_PATHS.includes(pathname)
+}
 
 function isPublicRoute(pathname: string): boolean {
     return PUBLIC_EXACT_PATHS.includes(pathname)
@@ -46,6 +58,13 @@ function isProtectedRoute(pathname: string): boolean {
 
 export default async function proxy(request: NextRequest) {
     const { pathname } = request.nextUrl
+    const isApi = isApiRoute(pathname)
+
+    if (isApi && isPublicApiRoute(pathname)) {
+        const response = NextResponse.next({ request })
+        addSecurityHeaders(response)
+        return response
+    }
 
     // --- Public routes: pass through immediately ---
     // CRITICAL: Do NOT create a Supabase client for public routes.
@@ -54,7 +73,7 @@ export default async function proxy(request: NextRequest) {
     // package clears the auth cookies via setAll(). When the user navigates back
     // to a protected route, the session is gone and they must re-login.
     // This was the root cause of the "re-login after visiting Showroom" bug.
-    if (isPublicRoute(pathname) || !isProtectedRoute(pathname)) {
+    if (!isApi && (isPublicRoute(pathname) || !isProtectedRoute(pathname))) {
         const response = NextResponse.next({ request })
         addSecurityHeaders(response)
         return response
@@ -93,6 +112,10 @@ export default async function proxy(request: NextRequest) {
     } = await supabase.auth.getUser()
 
     if (!user) {
+        if (isApi) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+
         const loginUrl = new URL('/login', request.url)
         loginUrl.searchParams.set('redirectTo', pathname)
         return NextResponse.redirect(loginUrl)
