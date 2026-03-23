@@ -364,6 +364,7 @@ export async function sendFinalProposal(eventId: string) {
  */
 export async function getPublicProposalDetails(token: string) {
     const supabase = await createClient()
+    const cleanToken = token.startsWith('final_') ? token.slice(6) : token
 
     const { data: event, error } = await supabase
         .from('events')
@@ -377,6 +378,103 @@ export async function getPublicProposalDetails(token: string) {
         .single()
 
     if (error || !event) {
+        const { data: finalEvent } = await supabase
+            .from('events')
+            .select(`
+                id, name, date, end_date, venue_name, venue_address, type,
+                status, guest_count, budget_max, proposal_status,
+                client_name, client_email, client_phone, client_feedback,
+                planner_id
+            `)
+            .eq('final_proposal_token', cleanToken)
+            .single()
+
+        if (finalEvent) {
+            const { data: planner } = await supabase
+                .from('planner_profiles')
+                .select('business_name, phone')
+                .eq('user_id', finalEvent.planner_id)
+                .single()
+
+            const { data: bookings } = await supabase
+                .from('booking_requests')
+                .select(`
+                    id, service, status, budget, quoted_amount, notes,
+                    vendors:vendor_id (business_name, rating, category)
+                `)
+                .eq('event_id', finalEvent.id)
+                .in('status', ['accepted', 'confirmed'])
+
+            const { data: timeline } = await supabase
+                .from('timeline_items')
+                .select('*')
+                .eq('event_id', finalEvent.id)
+                .order('start_time', { ascending: true })
+
+            const categoryIconMap: Record<string, string> = {
+                'venue': 'Building2',
+                'catering': 'UtensilsCrossed',
+                'photography': 'Camera',
+                'videography': 'Camera',
+                'decor': 'Sparkles',
+                'decoration': 'Sparkles',
+                'music': 'Music',
+                'dj': 'Music',
+                'entertainment': 'Music',
+                'makeup': 'Brush',
+                'mehendi': 'Brush',
+                'transport': 'Car',
+            }
+
+            const categories = ((bookings || []) as BookingWithVendor[]).map((b) => {
+                const rawVendor = b.vendors
+                const vendor = Array.isArray(rawVendor) ? rawVendor[0] || {} : rawVendor || {}
+                const serviceKey = (b.service || '').toLowerCase()
+                const isPerPlate = serviceKey === 'catering'
+                return {
+                    id: b.id,
+                    name: b.service || 'Service',
+                    icon: categoryIconMap[serviceKey] || 'Sparkles',
+                    vendor: {
+                        name: vendor.business_name || 'Partner',
+                        rating: vendor.rating || 4.5,
+                    },
+                    price: b.quoted_amount || b.budget || 0,
+                    perPlatePrice: isPerPlate ? (b.quoted_amount || b.budget || 0) / (finalEvent.guest_count || 1) : null,
+                    guestCount: isPerPlate ? finalEvent.guest_count : null,
+                    items: b.notes ? b.notes.split(',').map((s: string) => s.trim()) : [],
+                    status: b.status,
+                }
+            })
+
+            const timelineFormatted = (timeline || []).map(t => ({
+                id: t.id,
+                time: t.start_time ? new Date(`2000-01-01T${t.start_time}`).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '',
+                duration: t.duration ? `${t.duration} min` : null,
+                title: t.title,
+                description: t.description,
+                category: t.category || 'general',
+            }))
+
+            return {
+                proposal: {
+                    eventName: finalEvent.name,
+                    date: finalEvent.date,
+                    guestCount: finalEvent.guest_count,
+                    city: finalEvent.venue_address || finalEvent.venue_name || '',
+                    plannerName: planner?.business_name || 'Your Planner',
+                    plannerPhone: planner?.phone || '',
+                    personalMessage: `Final proposal for your ${finalEvent.type || 'event'}.`,
+                    categories,
+                    timeline: timelineFormatted,
+                    status: finalEvent.proposal_status,
+                    validUntil: 'Final Version',
+                    postApprovalNote: 'This is the final proposal. Upon approval, execution begins.',
+                },
+                error: null,
+            }
+        }
+
         const { data: snapshot, error: snapshotError } = await supabase
             .from('proposal_snapshots')
             .select(`
@@ -627,6 +725,101 @@ export async function getFinalProposal(token: string) {
     }
 
     if (!resolvedEvent) {
+        // Snapshot fallback: some links can be snapshot tokens with a `final_` prefix.
+        let snapshot: any = null
+        const { data: snapshotByFullToken } = await supabase
+            .from('proposal_snapshots')
+            .select(`
+                id,
+                event_id,
+                status,
+                client_feedback,
+                snapshot_data,
+                created_at,
+                events!inner(
+                    id,
+                    name,
+                    date,
+                    venue_name,
+                    venue_address,
+                    guest_count,
+                    type,
+                    proposal_status,
+                    planner_id
+                )
+            `)
+            .eq('token', token)
+            .single()
+
+        snapshot = snapshotByFullToken
+
+        if (!snapshot && cleanToken !== token) {
+            const { data: snapshotByCleanToken } = await supabase
+                .from('proposal_snapshots')
+                .select(`
+                    id,
+                    event_id,
+                    status,
+                    client_feedback,
+                    snapshot_data,
+                    created_at,
+                    events!inner(
+                        id,
+                        name,
+                        date,
+                        venue_name,
+                        venue_address,
+                        guest_count,
+                        type,
+                        proposal_status,
+                        planner_id
+                    )
+                `)
+                .eq('token', cleanToken)
+                .single()
+
+            snapshot = snapshotByCleanToken
+        }
+
+        if (snapshot) {
+            const snapshotData = (snapshot.snapshot_data || {}) as Record<string, any>
+            const snapshotEvent = Array.isArray(snapshot.events) ? snapshot.events[0] : snapshot.events
+
+            let plannerName = 'Your Planner'
+            let plannerPhone = ''
+            if (snapshotEvent?.planner_id) {
+                const { data: planner } = await supabase
+                    .from('planner_profiles')
+                    .select('business_name, phone')
+                    .eq('user_id', snapshotEvent.planner_id)
+                    .single()
+
+                plannerName = planner?.business_name || plannerName
+                plannerPhone = planner?.phone || plannerPhone
+            }
+
+            const proposalStatus = snapshot.status || snapshotEvent?.proposal_status || 'final'
+
+            return {
+                proposal: {
+                    eventName: (snapshotData.eventName as string) || snapshotEvent?.name || 'Your Event',
+                    date: (snapshotData.date as string) || snapshotEvent?.date || new Date(snapshot.created_at).toISOString(),
+                    guestCount: (snapshotData.guestCount as number) || snapshotEvent?.guest_count || 0,
+                    city: (snapshotData.city as string) || snapshotEvent?.venue_address || snapshotEvent?.venue_name || '',
+                    plannerName: (snapshotData.plannerName as string) || plannerName,
+                    plannerPhone,
+                    personalMessage: (snapshotData.personalMessage as string) || `Final proposal for your ${snapshotEvent?.type || 'event'}.`,
+                    categories: Array.isArray(snapshotData.categories) ? snapshotData.categories : [],
+                    timeline: Array.isArray(snapshotData.timeline) ? snapshotData.timeline : [],
+                    status: proposalStatus,
+                    validUntil: (snapshotData.validUntil as string) || 'Final Version',
+                    postApprovalNote: (snapshotData.postApprovalNote as string) || 'This is the final proposal. Upon approval, execution begins.',
+                },
+                status: proposalStatus,
+                error: null,
+            }
+        }
+
         return { error: 'Final proposal not found' }
     }
 
@@ -731,12 +924,29 @@ export async function updateFinalProposalStatus(token: string, status: string, f
     const snapshotUpdate: { status: string; client_feedback?: string } = { status }
     if (feedback) snapshotUpdate.client_feedback = feedback
 
-    const { data: updatedSnapshots, error: snapshotError } = await supabase
+    let updatedSnapshots: { id: string }[] | null = null
+
+    const { data: updatedSnapshotsByCleanToken, error: snapshotError } = await supabase
         .from('proposal_snapshots')
         .update(snapshotUpdate)
         .eq('token', cleanToken)
         .select('id')
         .limit(1)
+
+    updatedSnapshots = updatedSnapshotsByCleanToken
+
+    if (!snapshotError && (updatedSnapshots || []).length === 0 && cleanToken !== token) {
+        const { data: updatedSnapshotsByFullToken, error: fullTokenSnapshotError } = await supabase
+            .from('proposal_snapshots')
+            .update(snapshotUpdate)
+            .eq('token', token)
+            .select('id')
+            .limit(1)
+
+        if (!fullTokenSnapshotError) {
+            updatedSnapshots = updatedSnapshotsByFullToken
+        }
+    }
 
     if (snapshotError) {
         console.error('Error updating final snapshot proposal status:', snapshotError)

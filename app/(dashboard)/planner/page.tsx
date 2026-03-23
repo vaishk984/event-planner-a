@@ -147,7 +147,7 @@ export default async function PlannerDashboard() {
                         ) : (
                             <div className="text-sm text-gray-400 italic">No pending actions</div>
                         )}
-                        <Link href="/showroom" className="text-xs text-purple-600 mt-2 flex items-center gap-1 hover:underline">
+                        <Link href="/showroom" target="_blank" rel="noopener noreferrer" className="text-xs text-purple-600 mt-2 flex items-center gap-1 hover:underline">
                             View all <ArrowRight className="w-3 h-3" />
                         </Link>
                     </Card>
@@ -199,7 +199,7 @@ export default async function PlannerDashboard() {
                             <CheckCircle2 className="w-4 h-4" /> View Tasks
                         </Button>
                     </Link>
-                    <Link href="/showroom">
+                    <Link href="/showroom" target="_blank" rel="noopener noreferrer">
                         <Button variant="outline" className="gap-2">
                             <Users className="w-4 h-4" /> Browse Showroom
                         </Button>

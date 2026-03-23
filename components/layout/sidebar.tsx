@@ -54,11 +54,14 @@ export function Sidebar({ userEmail = 'planner@example.com' }: SidebarProps) {
             {/* Nav Items */}
             <nav className="flex-1 p-3 space-y-2 mt-4">
                 {navItems.map((item) => {
+                    const opensInNewTab = item.href === '/showroom' || item.href === '/capture'
                     const isActive = pathname.startsWith(item.href)
                     return (
                         <Link
                             key={item.href}
                             href={item.href}
+                            target={opensInNewTab ? '_blank' : undefined}
+                            rel={opensInNewTab ? 'noopener noreferrer' : undefined}
                             className={cn(
                                 "flex items-center px-4 py-3 rounded-xl transition-all duration-200 group overflow-hidden whitespace-nowrap",
                                 isActive

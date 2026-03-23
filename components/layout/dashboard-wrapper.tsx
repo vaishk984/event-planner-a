@@ -121,11 +121,14 @@ export function DashboardWrapper({ children, userEmail = 'planner@example.com', 
                 <nav className="flex-1 p-3 space-y-1 mt-4">
                     {navItems.map((item) => {
                         const baseHref = item.href
+                        const opensInNewTab = baseHref === '/showroom' || baseHref === '/capture'
                         const isActive = pathname === baseHref || (baseHref !== '/planner' && baseHref !== '/vendor' && pathname.startsWith(baseHref))
                         return (
                             <Link
                                 key={item.href}
                                 href={item.href}
+                                target={opensInNewTab ? '_blank' : undefined}
+                                rel={opensInNewTab ? 'noopener noreferrer' : undefined}
                                 prefetch={false}
                                 onClick={() => setIsMobileMenuOpen(false)}
                                 className={cn(
