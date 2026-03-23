@@ -15,6 +15,8 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { approveEvent, getEvent, updateEventStatus } from '@/lib/actions/event-actions'
 import { getRequestsForEvent } from '@/actions/booking'
+import { generateProposalToken } from '@/actions/client-portal'
+import { toast } from 'sonner'
 import type { Event, EventVendor } from '@/types/domain'
 
 // Category icon mapping
@@ -67,6 +69,7 @@ export default function ProposalPreviewPage() {
     const router = useRouter()
     const [loading, setLoading] = useState(true)
     const [approving, setApproving] = useState(false)
+    const [sendingProposal, setSendingProposal] = useState(false)
     const [event, setEvent] = useState<Event | null>(null)
     const [categories, setCategories] = useState<VendorCategory[]>([])
     const [timeline, setTimeline] = useState<any[]>([])
@@ -169,6 +172,49 @@ export default function ProposalPreviewPage() {
         }
     }
 
+    const handlePrintProposal = () => {
+        window.print()
+    }
+
+    const handleSendToClient = async () => {
+        if (!eventId) return
+
+        try {
+            setSendingProposal(true)
+            const tokenResult = await generateProposalToken(eventId)
+
+            if ('error' in tokenResult && tokenResult.error) {
+                toast.error(tokenResult.error)
+                return
+            }
+
+            const token = 'token' in tokenResult ? tokenResult.token : undefined
+            if (!token) {
+                toast.error('Failed to generate proposal link')
+                return
+            }
+
+            if (event?.status === 'planning') {
+                await updateEventStatus(eventId, 'proposed')
+            }
+
+            const proposalUrl = `${window.location.origin}/proposal/${token}`
+            try {
+                await navigator.clipboard.writeText(proposalUrl)
+            } catch {
+                // Clipboard can fail on insecure contexts; opening link still gives access.
+            }
+
+            window.open(proposalUrl, '_blank', 'noopener,noreferrer')
+            toast.success('Proposal sent. Link copied and opened in a new tab.')
+        } catch (error) {
+            console.error('Error sending proposal link:', error)
+            toast.error('Failed to send proposal')
+        } finally {
+            setSendingProposal(false)
+        }
+    }
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-screen">
@@ -204,11 +250,18 @@ export default function ProposalPreviewPage() {
                         </div>
                         <div className="flex items-center gap-3">
                             <Badge className="bg-blue-100 text-blue-700">Preview Mode</Badge>
-                            <Button variant="outline" size="sm">
+                            <Button variant="outline" size="sm" onClick={handlePrintProposal}>
                                 <Download className="w-4 h-4 mr-2" /> PDF
                             </Button>
-                            <Button size="sm" className="bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600">
-                                <Send className="w-4 h-4 mr-2" /> Send to Client
+                            <Button
+                                size="sm"
+                                className="bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600"
+                                onClick={handleSendToClient}
+                                disabled={sendingProposal}
+                            >
+                                {sendingProposal
+                                    ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending...</>
+                                    : <><Send className="w-4 h-4 mr-2" /> Send to Client</>}
                             </Button>
                         </div>
                     </div>
