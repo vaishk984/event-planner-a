@@ -369,7 +369,67 @@ export async function getPublicProposalDetails(token: string) {
         .single()
 
     if (error || !event) {
-        return { error: 'Proposal not found or link has expired' }
+        const { data: snapshot, error: snapshotError } = await supabase
+            .from('proposal_snapshots')
+            .select(`
+                id,
+                event_id,
+                status,
+                client_feedback,
+                snapshot_data,
+                created_at,
+                events!inner(
+                    id,
+                    name,
+                    date,
+                    venue_name,
+                    venue_address,
+                    guest_count,
+                    type,
+                    proposal_status,
+                    planner_id
+                )
+            `)
+            .eq('token', token)
+            .single()
+
+        if (snapshotError || !snapshot) {
+            return { error: 'Proposal not found or link has expired' }
+        }
+
+        const snapshotData = (snapshot.snapshot_data || {}) as Record<string, any>
+        const snapshotEvent = Array.isArray(snapshot.events) ? snapshot.events[0] : snapshot.events
+
+        let plannerName = 'Your Planner'
+        let plannerPhone = ''
+        if (snapshotEvent?.planner_id) {
+            const { data: planner } = await supabase
+                .from('planner_profiles')
+                .select('business_name, phone')
+                .eq('user_id', snapshotEvent.planner_id)
+                .single()
+
+            plannerName = planner?.business_name || plannerName
+            plannerPhone = planner?.phone || plannerPhone
+        }
+
+        return {
+            proposal: {
+                eventName: (snapshotData.eventName as string) || snapshotEvent?.name || 'Your Event',
+                date: (snapshotData.date as string) || snapshotEvent?.date || new Date(snapshot.created_at).toISOString(),
+                guestCount: (snapshotData.guestCount as number) || snapshotEvent?.guest_count || 0,
+                city: (snapshotData.city as string) || snapshotEvent?.venue_address || snapshotEvent?.venue_name || '',
+                plannerName: (snapshotData.plannerName as string) || plannerName,
+                plannerPhone,
+                personalMessage: (snapshotData.personalMessage as string) || `We're thrilled to be part of your ${snapshotEvent?.type || 'event'}! Here's what we've curated for you.`,
+                categories: Array.isArray(snapshotData.categories) ? snapshotData.categories : [],
+                timeline: Array.isArray(snapshotData.timeline) ? snapshotData.timeline : [],
+                status: snapshot.status || snapshotEvent?.proposal_status || 'sent',
+                validUntil: (snapshotData.validUntil as string) || new Date(snapshot.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+                postApprovalNote: (snapshotData.postApprovalNote as string) || 'Once approved, we will finalize all vendor bookings, confirm the timeline, and send you a detailed event day runsheet.',
+            },
+            error: null,
+        }
     }
 
     // Get planner info
@@ -473,14 +533,51 @@ export async function updateProposalStatus(token: string, status: string, feedba
     const updateData: { proposal_status: string; client_feedback?: string } = { proposal_status: status }
     if (feedback) updateData.client_feedback = feedback
 
-    const { error } = await supabase
+    const { data: updatedEvents, error } = await supabase
         .from('events')
         .update(updateData)
         .eq('public_token', token)
+        .select('id')
+        .limit(1)
 
     if (error) {
         console.error('Error updating proposal status:', error)
         return { success: false, error: 'Failed to update' }
+    }
+
+    if ((updatedEvents || []).length > 0) {
+        return { success: true }
+    }
+
+    const snapshotUpdate: { status: string; client_feedback?: string } = { status }
+    if (feedback) snapshotUpdate.client_feedback = feedback
+
+    const { data: updatedSnapshots, error: snapshotError } = await supabase
+        .from('proposal_snapshots')
+        .update(snapshotUpdate)
+        .eq('token', token)
+        .select('id, event_id')
+        .limit(1)
+
+    if (snapshotError) {
+        console.error('Error updating snapshot proposal status:', snapshotError)
+        return { success: false, error: 'Failed to update' }
+    }
+
+    if ((updatedSnapshots || []).length === 0) {
+        return { success: false, error: 'Proposal not found' }
+    }
+
+    const snapshotEventId = updatedSnapshots[0].event_id
+    if (snapshotEventId) {
+        const { error: eventSyncError } = await supabase
+            .from('events')
+            .update(updateData)
+            .eq('id', snapshotEventId)
+
+        if (eventSyncError) {
+            console.error('Error syncing event proposal status:', eventSyncError)
+        }
     }
 
     return { success: true }
