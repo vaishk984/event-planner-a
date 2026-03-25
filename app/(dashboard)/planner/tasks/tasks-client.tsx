@@ -22,7 +22,7 @@ export function TasksClient({ initialTasks }: TasksClientProps) {
         eventId: t.event_id,
         eventName: t.events?.name || 'Untitled Event',
         title: t.title,
-        description: t.description || undefined,
+        description: t.description || t.notes || undefined,
         status: t.status as TaskStatus,
         priority: t.priority,
         dueDate: t.due_date || undefined,

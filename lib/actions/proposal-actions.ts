@@ -216,7 +216,7 @@ export async function getPlannerProposalSnapshots(): Promise<PlannerProposalSnap
         return [];
     }
 
-    return (data || []).map((proposal: any) => ({
+    const snapshotRows = (data || []).map((proposal: any) => ({
         id: proposal.id,
         event_id: proposal.event_id,
         version: proposal.version,
@@ -231,4 +231,53 @@ export async function getPlannerProposalSnapshots(): Promise<PlannerProposalSnap
         guest_count: proposal.events?.guest_count || proposal.snapshot_data?.guestCount || 0,
         city: proposal.events?.city || proposal.snapshot_data?.city || '',
     }));
+
+    const { data: eventsData, error: eventsError } = await supabase
+        .from('events')
+        .select('id, name, client_name, date, guest_count, city, proposal_status, public_token, final_proposal_token, updated_at')
+        .eq('planner_id', plannerId)
+        .in('proposal_status', ['sent', 'viewed', 'approved', 'changes_requested', 'final']);
+
+    if (eventsError) {
+        console.error('Error fetching planner proposal events fallback:', eventsError);
+        return snapshotRows;
+    }
+
+    const coveredEventIds = new Set(snapshotRows.map((row) => row.event_id));
+    const fallbackRows: PlannerProposalSnapshot[] = (eventsData || [])
+        .filter((event: any) => !coveredEventIds.has(event.id))
+        .map((event: any) => {
+            const token = event.final_proposal_token || event.public_token;
+            if (!token) return null;
+
+            const normalizedStatus = event.proposal_status === 'final' ? 'sent' : event.proposal_status;
+
+            return {
+                id: `event-${event.id}`,
+                event_id: event.id,
+                version: 0,
+                token,
+                status: normalizedStatus || 'sent',
+                snapshot_data: {
+                    eventName: event.name,
+                    clientName: event.client_name,
+                    date: event.date,
+                    guestCount: event.guest_count,
+                    city: event.city,
+                    categories: [],
+                },
+                client_feedback: null,
+                created_at: event.updated_at || new Date().toISOString(),
+                event_name: event.name || 'Unknown Event',
+                client_name: event.client_name || 'Unknown Client',
+                event_date: event.date || '',
+                guest_count: event.guest_count || 0,
+                city: event.city || '',
+            };
+        })
+        .filter((row): row is PlannerProposalSnapshot => row !== null);
+
+    return [...snapshotRows, ...fallbackRows].sort((a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
 }
