@@ -20,17 +20,17 @@ function normalizeDueDateInput(raw?: string): string | null {
 
     // Support yyyy-mm-dd (date input), dd-mm-yyyy, and ISO-like values.
     if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-        return `${raw}T00:00:00.000Z`
+        return raw
     }
 
     if (/^\d{2}-\d{2}-\d{4}$/.test(raw)) {
         const normalized = `${raw.slice(6, 10)}-${raw.slice(3, 5)}-${raw.slice(0, 2)}`
-        return `${normalized}T00:00:00.000Z`
+        return normalized
     }
 
     const parsed = new Date(raw)
     if (Number.isNaN(parsed.getTime())) return null
-    return parsed.toISOString()
+    return parsed.toISOString().slice(0, 10)
 }
 
 // ============================================================================
@@ -217,23 +217,67 @@ export async function createTask(formData: FormData) {
         // Insert task
         const normalizedDueDate = normalizeDueDateInput(validData.dueDate)
 
-        const { data, error } = await supabase
+        const baseInsertPayload: Record<string, string | null> = {
+            event_id: validData.eventId,
+            title: validData.title,
+            priority: validData.priority,
+            due_date: normalizedDueDate,
+            status: 'pending',
+        }
+
+        let insertResult = await supabase
             .from('tasks')
-            .insert({
-                event_id: validData.eventId,
-                title: validData.title,
-                vendor_id: validData.vendorId || null,
-                priority: validData.priority,
-                due_date: normalizedDueDate,
-                notes: validData.notes || validData.description || null,
-                status: 'pending',
-            })
+            .insert(baseInsertPayload)
             .select()
             .single()
+
+        const insertErrorMessage = (insertResult.error?.message || '').toLowerCase()
+        if (insertResult.error && insertErrorMessage.includes('planner_id')) {
+            insertResult = await supabase
+                .from('tasks')
+                .insert({ ...baseInsertPayload, planner_id: session.userId })
+                .select()
+                .single()
+        }
+
+        const { data, error } = insertResult
 
         if (error) {
             logger.error('Failed to create task:', error)
             return { error: `Failed to create task: ${(error as any).message || JSON.stringify(error)}` }
+        }
+
+        const createdTaskId = data.id as string
+        const detailText = validData.notes || validData.description || null
+
+        if (validData.vendorId) {
+            const vendorUpdate = await supabase
+                .from('tasks')
+                .update({ vendor_id: validData.vendorId })
+                .eq('id', createdTaskId)
+
+            const vendorErrorMessage = (vendorUpdate.error?.message || '').toLowerCase()
+            if (vendorUpdate.error && vendorErrorMessage.includes('vendor_id')) {
+                await supabase
+                    .from('tasks')
+                    .update({ assigned_to: validData.vendorId })
+                    .eq('id', createdTaskId)
+            }
+        }
+
+        if (detailText) {
+            const noteUpdate = await supabase
+                .from('tasks')
+                .update({ notes: detailText })
+                .eq('id', createdTaskId)
+
+            const notesErrorMessage = (noteUpdate.error?.message || '').toLowerCase()
+            if (noteUpdate.error && notesErrorMessage.includes('notes')) {
+                await supabase
+                    .from('tasks')
+                    .update({ description: detailText })
+                    .eq('id', createdTaskId)
+            }
         }
 
         revalidatePath('/planner/tasks')
@@ -275,7 +319,7 @@ export async function updateTask(formData: FormData) {
 
         const { id, ...updateData } = validation.data
 
-        // Build update object
+        // Build base update object using stable/shared columns
         const updates: Record<string, string | null> = {}
         if (updateData.title) updates.title = updateData.title
         if (updateData.priority) updates.priority = updateData.priority
@@ -286,11 +330,6 @@ export async function updateTask(formData: FormData) {
             }
         }
         if (updateData.dueDate !== undefined) updates.due_date = normalizeDueDateInput(updateData.dueDate)
-        if (updateData.notes !== undefined) {
-            updates.notes = updateData.notes
-        } else if (updateData.description !== undefined) {
-            updates.notes = updateData.description
-        }
 
         const { data, error } = await supabase
             .from('tasks')
@@ -311,6 +350,22 @@ export async function updateTask(formData: FormData) {
         const taskWithEvent = data as Task & { events: { planner_id: string } }
         if (taskWithEvent.events.planner_id !== session.userId) {
             return { error: 'Unauthorized' }
+        }
+
+        const detailText = updateData.notes ?? updateData.description
+        if (detailText !== undefined) {
+            const noteUpdate = await supabase
+                .from('tasks')
+                .update({ notes: detailText })
+                .eq('id', id)
+
+            const notesErrorMessage = (noteUpdate.error?.message || '').toLowerCase()
+            if (noteUpdate.error && notesErrorMessage.includes('notes')) {
+                await supabase
+                    .from('tasks')
+                    .update({ description: detailText })
+                    .eq('id', id)
+            }
         }
 
         revalidatePath('/planner/tasks')
