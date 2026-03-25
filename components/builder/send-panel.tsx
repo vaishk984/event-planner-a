@@ -12,7 +12,7 @@ import {
     CheckCircle2, Building2, UtensilsCrossed, Camera, Sparkles, Music, Brush
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { generateProposalToken } from '@/actions/client-portal'
+import { generateProposalToken, sendFinalProposal } from '@/actions/client-portal'
 import type { Event, EventVendor } from '@/types/domain'
 
 interface SendPanelProps {
@@ -20,9 +20,10 @@ interface SendPanelProps {
     packages: { silver: any[]; gold: any[]; platinum: any[] }
     design: { moodboard: string[]; colors: string[]; notes: string }
     vendors: EventVendor[]
+    onFinalizeShare?: () => void
 }
 
-export function SendPanel({ event, packages, design, vendors }: SendPanelProps) {
+export function SendPanel({ event, packages, design, vendors, onFinalizeShare }: SendPanelProps) {
     const [sending, setSending] = useState(false)
     const [sent, setSent] = useState(false)
     const [linkGenerated, setLinkGenerated] = useState(false)
@@ -84,6 +85,52 @@ Your Event Planner`
             `${options.personalMessage}\n\nView your proposal here: ${proposalLink}`
         )
         window.open(`mailto:${event.clientEmail}?subject=${subject}&body=${body}`, '_blank')
+    }
+
+    const openPreview = async () => {
+        setSending(true)
+        try {
+            const result = await generateProposalToken(event.id)
+
+            if (result.error || !result.token) {
+                toast.error(result.error || 'Failed to open preview')
+                return
+            }
+
+            window.open(`/proposal/${result.token}`, '_blank', 'noopener,noreferrer')
+            toast.success('Preview opened in new tab')
+        } catch (error) {
+            console.error('Error opening preview:', error)
+            toast.error('Something went wrong')
+        } finally {
+            setSending(false)
+        }
+    }
+
+    const finalizeAndShare = async () => {
+        setSending(true)
+
+        try {
+            const result = await sendFinalProposal(event.id)
+            if (result.error || !result.token) {
+                toast.error(result.error || 'Failed to finalize proposal')
+                return
+            }
+
+            setSent(true)
+            onFinalizeShare?.()
+
+            const finalUrl = `${window.location.origin}/proposal/final_${result.token}`
+            setProposalLink(finalUrl)
+            setLinkGenerated(true)
+
+            toast.success('Finalized and shared successfully')
+        } catch (error) {
+            console.error('Error finalizing proposal:', error)
+            toast.error('Something went wrong')
+        } finally {
+            setSending(false)
+        }
     }
 
     // Calculate totals from passed vendors
@@ -219,11 +266,8 @@ Your Event Planner`
                             <Button
                                 variant="outline"
                                 className="w-full"
-                                onClick={() => {
-                                    const previewUrl = `/planner/events/${event.id}/proposal/preview`
-                                    window.open(previewUrl, '_blank')
-                                    toast.success('Preview opened in new tab')
-                                }}
+                                onClick={openPreview}
+                                disabled={sending}
                             >
                                 <Eye className="w-4 h-4 mr-2" /> Open Preview
                             </Button>
@@ -285,6 +329,19 @@ Your Event Planner`
                                         <Mail className="w-4 h-4 mr-2" /> Email
                                     </Button>
                                 </div>
+                                <Button
+                                    className="w-full mt-3 bg-green-600 hover:bg-green-700"
+                                    onClick={finalizeAndShare}
+                                    disabled={sending || sent}
+                                >
+                                    {sending ? (
+                                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Finalizing...</>
+                                    ) : sent ? (
+                                        <><Check className="w-4 h-4 mr-2" /> Finalized & Shared</>
+                                    ) : (
+                                        <><CheckCircle2 className="w-4 h-4 mr-2" /> Finalize & Share</>
+                                    )}
+                                </Button>
                             </CardContent>
                         </Card>
                     )}

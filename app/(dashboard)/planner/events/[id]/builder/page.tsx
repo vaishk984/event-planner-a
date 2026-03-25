@@ -24,6 +24,8 @@ import type { Event, Intake, Vendor, EventVendor, ProposalItem, VendorCategory }
 import { getRequestsForEvent } from '@/actions/booking'
 import { getEvent } from '@/lib/actions/event-actions'
 import { getIntake } from '@/lib/actions/intake-actions'
+import { generateProposalToken, saveProposalDraft } from '@/actions/client-portal'
+import { toast } from 'sonner'
 
 interface BuilderState {
     shortlist: {
@@ -57,6 +59,8 @@ export default function ProposalBuilderPage() {
 
     const [activePanel, setActivePanel] = useState('brief')
     const [loading, setLoading] = useState(true)
+    const [headerActionLoading, setHeaderActionLoading] = useState(false)
+    const [sendConfirmed, setSendConfirmed] = useState(false)
     const [event, setEvent] = useState<Event | null>(null)
     const [intake, setIntake] = useState<Intake | null>(null)
 
@@ -165,6 +169,49 @@ export default function ProposalBuilderPage() {
         }
     }
 
+    const handleSaveDraft = async () => {
+        setHeaderActionLoading(true)
+        try {
+            const result = await saveProposalDraft(eventId)
+            if ('error' in result && result.error) {
+                toast.error(result.error)
+                return
+            }
+
+            toast.success('Draft saved successfully')
+        } catch (error) {
+            console.error('Failed to save draft:', error)
+            toast.error('Failed to save draft')
+        } finally {
+            setHeaderActionLoading(false)
+        }
+    }
+
+    const handlePreviewProposal = async () => {
+        setHeaderActionLoading(true)
+        try {
+            const result = await generateProposalToken(eventId)
+            if ('error' in result && result.error) {
+                toast.error(result.error)
+                return
+            }
+
+            const token = 'token' in result ? result.token : undefined
+            if (!token) {
+                toast.error('Could not open preview')
+                return
+            }
+
+            window.open(`/proposal/${token}`, '_blank', 'noopener,noreferrer')
+            toast.success('Preview opened in new tab')
+        } catch (error) {
+            console.error('Failed to preview proposal:', error)
+            toast.error('Failed to open preview')
+        } finally {
+            setHeaderActionLoading(false)
+        }
+    }
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-[60vh]">
@@ -207,8 +254,11 @@ export default function ProposalBuilderPage() {
                             ₹{((event.budgetMax || 0) / 100000).toFixed(1)}L
                         </p>
                     </div>
-                    <Button variant="outline">Save Draft</Button>
-                    <Button className="bg-orange-500 hover:bg-orange-600">
+                    <Button variant="outline" onClick={handleSaveDraft} disabled={headerActionLoading}>
+                        {headerActionLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                        Save Draft
+                    </Button>
+                    <Button className="bg-orange-500 hover:bg-orange-600" onClick={handlePreviewProposal} disabled={headerActionLoading}>
                         Preview Proposal
                     </Button>
                 </div>
@@ -220,6 +270,7 @@ export default function ProposalBuilderPage() {
                     {PANELS.map((panel, index) => {
                         const Icon = panel.icon
                         const isActive = activePanel === panel.id
+                        const isSendCompleted = panel.id === 'send' && sendConfirmed
                         const isPast = PANELS.findIndex(p => p.id === activePanel) > index
 
                         return (
@@ -228,7 +279,9 @@ export default function ProposalBuilderPage() {
                                 onClick={() => setActivePanel(panel.id)}
                                 className={`
                                     flex-1 flex items-center gap-2 px-4 py-3 rounded-lg transition-all
-                                    ${isActive
+                                    ${isSendCompleted
+                                        ? 'bg-green-50 border-2 border-green-500 text-green-700'
+                                        : isActive
                                         ? 'bg-orange-50 border-2 border-orange-500 text-orange-700'
                                         : isPast
                                             ? 'bg-green-50 text-green-700 hover:bg-green-100'
@@ -238,14 +291,16 @@ export default function ProposalBuilderPage() {
                             >
                                 <div className={`
                                     w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold
-                                    ${isActive
+                                    ${isSendCompleted
+                                        ? 'bg-green-500 text-white'
+                                        : isActive
                                         ? 'bg-orange-500 text-white'
                                         : isPast
                                             ? 'bg-green-500 text-white'
                                             : 'bg-gray-200 text-gray-600'
                                     }
                                 `}>
-                                    {isPast ? '✓' : index + 1}
+                                    {isPast || isSendCompleted ? '✓' : index + 1}
                                 </div>
                                 <div className="text-left hidden lg:block">
                                     <p className="font-medium text-sm">{panel.label}</p>
@@ -305,6 +360,7 @@ export default function ProposalBuilderPage() {
                         event={event}
                         packages={builderState.packages}
                         design={builderState.design}
+                        onFinalizeShare={() => setSendConfirmed(true)}
                         vendors={builderState.shortlist.confirmed.map((v: Vendor) => ({
                             vendorId: v.id,
                             eventId: event.id,

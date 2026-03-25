@@ -239,34 +239,6 @@ export default function InvoicesPage() {
 
     const openInvoicePrintDialog = (invoice: Invoice, pdfMode: boolean) => {
         const html = buildInvoicePrintHtml(invoice)
-        const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=1000,height=800')
-
-        const printWithTargetWindow = (targetWindow: Window) => {
-            targetWindow.document.open()
-            targetWindow.document.write(html)
-            targetWindow.document.close()
-            targetWindow.document.title = invoice.invoice_number || 'Invoice'
-
-            targetWindow.onload = () => {
-                targetWindow.focus()
-                targetWindow.print()
-                targetWindow.onafterprint = () => {
-                    setExporting(false)
-                    targetWindow.close()
-                }
-                // Fallback in case onafterprint is not fired by browser.
-                window.setTimeout(() => setExporting(false), 1200)
-            }
-        }
-
-        if (printWindow) {
-            printWithTargetWindow(printWindow)
-            if (pdfMode) {
-                toast.success('Print dialog opened. Choose "Save as PDF" to download.')
-            }
-            return
-        }
-
         const iframe = document.createElement('iframe')
         iframe.style.position = 'fixed'
         iframe.style.width = '0'
@@ -279,17 +251,37 @@ export default function InvoicesPage() {
         const frameWindow = iframe.contentWindow
         if (!frameWindow) {
             document.body.removeChild(iframe)
-            toast.error('Unable to open print view. Please allow popups and try again.')
+            toast.error('Unable to open print view. Please try again.')
             setExporting(false)
             return
         }
 
-        printWithTargetWindow(frameWindow)
-        window.setTimeout(() => {
+        let cleanedUp = false
+        const cleanup = () => {
+            if (cleanedUp) return
+            cleanedUp = true
+            setExporting(false)
             if (document.body.contains(iframe)) {
                 document.body.removeChild(iframe)
             }
-        }, 2000)
+        }
+
+        frameWindow.document.open()
+        frameWindow.document.write(html)
+        frameWindow.document.close()
+        frameWindow.document.title = invoice.invoice_number || 'Invoice'
+
+        frameWindow.onload = () => {
+            frameWindow.focus()
+            frameWindow.print()
+            frameWindow.onafterprint = cleanup
+            // Fallback because some browsers may not fire onafterprint for iframe content.
+            window.setTimeout(cleanup, 1500)
+        }
+
+        // Extra safeguard if iframe load does not finish.
+        window.setTimeout(cleanup, 4000)
+
         if (pdfMode) {
             toast.success('Print dialog opened. Choose "Save as PDF" to download.')
         }
