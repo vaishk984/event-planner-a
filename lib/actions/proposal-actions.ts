@@ -246,13 +246,13 @@ export async function getPlannerProposalSnapshots(): Promise<PlannerProposalSnap
     const coveredEventIds = new Set(snapshotRows.map((row) => row.event_id));
     const fallbackRows: PlannerProposalSnapshot[] = (eventsData || [])
         .filter((event: any) => !coveredEventIds.has(event.id))
-        .map((event: any) => {
+        .flatMap((event: any): PlannerProposalSnapshot[] => {
             const token = event.final_proposal_token || event.public_token;
-            if (!token) return null;
+            if (!token) return [];
 
             const normalizedStatus = event.proposal_status === 'final' ? 'sent' : event.proposal_status;
 
-            return {
+            return [{
                 id: `event-${event.id}`,
                 event_id: event.id,
                 version: 0,
@@ -273,9 +273,8 @@ export async function getPlannerProposalSnapshots(): Promise<PlannerProposalSnap
                 event_date: event.date || '',
                 guest_count: event.guest_count || 0,
                 city: event.city || '',
-            };
-        })
-        .filter((row): row is PlannerProposalSnapshot => row !== null);
+            }];
+        });
 
     return [...snapshotRows, ...fallbackRows].sort((a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
