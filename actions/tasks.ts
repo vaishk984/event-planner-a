@@ -222,11 +222,10 @@ export async function createTask(formData: FormData) {
             .insert({
                 event_id: validData.eventId,
                 title: validData.title,
-                description: validData.description || null,
                 vendor_id: validData.vendorId || null,
                 priority: validData.priority,
                 due_date: normalizedDueDate,
-                notes: validData.notes || null,
+                notes: validData.notes || validData.description || null,
                 status: 'pending',
             })
             .select()
@@ -279,7 +278,6 @@ export async function updateTask(formData: FormData) {
         // Build update object
         const updates: Record<string, string | null> = {}
         if (updateData.title) updates.title = updateData.title
-        if (updateData.description !== undefined) updates.description = updateData.description
         if (updateData.priority) updates.priority = updateData.priority
         if (updateData.status) {
             updates.status = updateData.status
@@ -288,7 +286,11 @@ export async function updateTask(formData: FormData) {
             }
         }
         if (updateData.dueDate !== undefined) updates.due_date = normalizeDueDateInput(updateData.dueDate)
-        if (updateData.notes !== undefined) updates.notes = updateData.notes
+        if (updateData.notes !== undefined) {
+            updates.notes = updateData.notes
+        } else if (updateData.description !== undefined) {
+            updates.notes = updateData.description
+        }
 
         const { data, error } = await supabase
             .from('tasks')
