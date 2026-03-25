@@ -43,6 +43,7 @@ const createTaskSchema = z.object({
     description: z.string().optional(),
     vendorId: z.string().uuid('Invalid vendor ID').optional().or(z.literal('')),
     priority: z.enum(['low', 'medium', 'high', 'urgent']),
+    status: z.enum(['pending', 'accepted', 'rejected', 'in_progress', 'completed', 'verified']).optional(),
     dueDate: z.string().optional(),
     notes: z.string().optional(),
 })
@@ -191,6 +192,7 @@ export async function createTask(formData: FormData) {
             description: getFormString(formData, 'description'),
             vendorId: getFormString(formData, 'vendorId') || '',
             priority: getFormString(formData, 'priority') || 'medium',
+            status: getFormString(formData, 'status') || 'pending',
             dueDate: getFormString(formData, 'dueDate'),
             notes: getFormString(formData, 'notes'),
         }
@@ -222,7 +224,7 @@ export async function createTask(formData: FormData) {
             title: validData.title,
             priority: validData.priority,
             due_date: normalizedDueDate,
-            status: 'pending',
+            status: validData.status || 'pending',
         }
 
         let insertResult = await supabase
@@ -331,7 +333,7 @@ export async function updateTask(formData: FormData) {
         }
         if (updateData.dueDate !== undefined) updates.due_date = normalizeDueDateInput(updateData.dueDate)
 
-        const { data, error } = await supabase
+        let updateResult = await supabase
             .from('tasks')
             .update(updates)
             .eq('id', id)
@@ -340,6 +342,22 @@ export async function updateTask(formData: FormData) {
                 events!inner(name, planner_id)
             `)
             .single()
+
+        const updateErrorMessage = (updateResult.error?.message || '').toLowerCase()
+        if (updateResult.error && updateErrorMessage.includes('completed_at')) {
+            const { completed_at, ...withoutCompletedAt } = updates
+            updateResult = await supabase
+                .from('tasks')
+                .update(withoutCompletedAt)
+                .eq('id', id)
+                .select(`
+                    *,
+                    events!inner(name, planner_id)
+                `)
+                .single()
+        }
+
+        const { data, error } = updateResult
 
         if (error) {
             logger.error('Failed to update task', error)
@@ -435,7 +453,7 @@ export async function completeTask(id: string) {
             return { error: 'Unauthorized' }
         }
 
-        const { data, error } = await supabase
+        let completeResult = await supabase
             .from('tasks')
             .update({
                 status: 'completed',
@@ -444,6 +462,18 @@ export async function completeTask(id: string) {
             .eq('id', id)
             .select()
             .single()
+
+        const completeErrorMessage = (completeResult.error?.message || '').toLowerCase()
+        if (completeResult.error && completeErrorMessage.includes('completed_at')) {
+            completeResult = await supabase
+                .from('tasks')
+                .update({ status: 'completed' })
+                .eq('id', id)
+                .select()
+                .single()
+        }
+
+        const { data, error } = completeResult
 
         if (error) {
             logger.error('Failed to complete task', error)

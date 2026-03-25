@@ -7,9 +7,10 @@ import { TaskCard } from './task-card'
 
 interface SortableTaskProps {
     task: Task
+    onMarkComplete?: (taskId: string) => void
 }
 
-export function SortableTask({ task }: SortableTaskProps) {
+export function SortableTask({ task, onMarkComplete }: SortableTaskProps) {
     const {
         attributes,
         listeners,
@@ -27,7 +28,7 @@ export function SortableTask({ task }: SortableTaskProps) {
 
     return (
         <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-            <TaskCard task={task} />
+            <TaskCard task={task} onMarkComplete={onMarkComplete} />
         </div>
     )
 }

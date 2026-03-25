@@ -34,6 +34,7 @@ export function TasksClient({ initialTasks }: TasksClientProps) {
 
     const [tasks, setTasks] = useState<Task[]>(initialTasks.map(mapServerTaskToUITask))
     const [showCreateDialog, setShowCreateDialog] = useState(false)
+    const [createDefaultStatus, setCreateDefaultStatus] = useState<TaskStatus>('pending')
 
     const handleTaskMove = async (taskId: string, newStatus: TaskStatus) => {
         const previousStatus = tasks.find(task => task.id === taskId)?.status
@@ -63,6 +64,15 @@ export function TasksClient({ initialTasks }: TasksClientProps) {
         setShowCreateDialog(false)
     }
 
+    const handleAddTaskFromColumn = (status: TaskStatus) => {
+        setCreateDefaultStatus(status)
+        setShowCreateDialog(true)
+    }
+
+    const handleMarkComplete = async (taskId: string) => {
+        await handleTaskMove(taskId, 'completed')
+    }
+
     return (
         <div className="h-full flex flex-col">
             {/* Header */}
@@ -85,13 +95,19 @@ export function TasksClient({ initialTasks }: TasksClientProps) {
             {/* Create Task Dialog */}
             {showCreateDialog && (
                 <CreateTaskDialog
+                    defaultStatus={createDefaultStatus}
                     onClose={() => setShowCreateDialog(false)}
                     onCreated={handleTaskCreated}
                 />
             )}
 
             {/* Board */}
-            <KanbanBoard tasks={tasks} onTaskMove={handleTaskMove} />
+            <KanbanBoard
+                tasks={tasks}
+                onTaskMove={handleTaskMove}
+                onAddTask={handleAddTaskFromColumn}
+                onMarkComplete={handleMarkComplete}
+            />
         </div>
     )
 }
@@ -101,9 +117,11 @@ export function TasksClient({ initialTasks }: TasksClientProps) {
 // ============================================================================
 
 function CreateTaskDialog({
+    defaultStatus,
     onClose,
     onCreated
 }: {
+    defaultStatus: TaskStatus
     onClose: () => void
     onCreated: (task: Task) => void
 }) {
@@ -112,6 +130,7 @@ function CreateTaskDialog({
     const [selectedEventId, setSelectedEventId] = useState('')
     const [title, setTitle] = useState('')
     const [description, setDescription] = useState('')
+    const [status, setStatus] = useState<TaskStatus>(defaultStatus)
     const [priority, setPriority] = useState('medium')
     const [dueDate, setDueDate] = useState('')
     const [vendorId, setVendorId] = useState('')
@@ -127,6 +146,10 @@ function CreateTaskDialog({
             loadVendors(selectedEventId)
         }
     }, [selectedEventId])
+
+    useEffect(() => {
+        setStatus(defaultStatus)
+    }, [defaultStatus])
 
     const loadEvents = async () => {
         const supabase = createClient()
@@ -172,6 +195,7 @@ function CreateTaskDialog({
         formData.append('eventId', selectedEventId)
         formData.append('title', title.trim())
         formData.append('description', description.trim())
+        formData.append('status', status)
         formData.append('priority', priority)
         if (dueDate) formData.append('dueDate', dueDate)
         if (vendorId) formData.append('vendorId', vendorId)
@@ -190,7 +214,7 @@ function CreateTaskDialog({
                 eventName,
                 title: title.trim(),
                 description: description.trim() || undefined,
-                status: 'pending' as TaskStatus,
+                status,
                 priority: priority as TaskPriority,
                 dueDate: dueDate || undefined,
                 assignee: vendorName,

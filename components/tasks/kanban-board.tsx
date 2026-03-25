@@ -23,6 +23,8 @@ import { SortableTask } from './sortable-task'
 interface KanbanBoardProps {
     tasks: Task[]
     onTaskMove: (taskId: string, newStatus: TaskStatus) => void
+    onAddTask?: (status: TaskStatus) => void
+    onMarkComplete?: (taskId: string) => void
 }
 
 const COLUMNS: { id: TaskStatus; title: string, color: string, headerColor: string }[] = [
@@ -32,7 +34,17 @@ const COLUMNS: { id: TaskStatus; title: string, color: string, headerColor: stri
     { id: 'completed', title: 'Completed', color: 'bg-green-50/30', headerColor: 'border-t-4 border-green-400' }
 ]
 
-function ColumnContainer({ column, tasks }: { column: typeof COLUMNS[0], tasks: Task[] }) {
+function ColumnContainer({
+    column,
+    tasks,
+    onAddTask,
+    onMarkComplete
+}: {
+    column: typeof COLUMNS[0]
+    tasks: Task[]
+    onAddTask?: (status: TaskStatus) => void
+    onMarkComplete?: (taskId: string) => void
+}) {
     const { setNodeRef } = useDroppable({
         id: column.id,
     })
@@ -47,7 +59,13 @@ function ColumnContainer({ column, tasks }: { column: typeof COLUMNS[0], tasks: 
                         {tasks.length}
                     </span>
                 </div>
-                <Button variant="ghost" size="icon" className="h-6 w-6 text-gray-400 hover:text-gray-600">
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-gray-400 hover:text-gray-600"
+                    onClick={() => onAddTask?.(column.id)}
+                    aria-label={`Add task to ${column.title}`}
+                >
                     <Plus className="w-4 h-4" />
                 </Button>
             </div>
@@ -56,7 +74,11 @@ function ColumnContainer({ column, tasks }: { column: typeof COLUMNS[0], tasks: 
             <div className="p-3 pt-3 flex-1 overflow-y-auto no-scrollbar space-y-3 min-h-[100px]">
                 <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
                     {tasks.map((task) => (
-                        <SortableTask key={task.id} task={task} />
+                        <SortableTask
+                            key={task.id}
+                            task={task}
+                            onMarkComplete={onMarkComplete}
+                        />
                     ))}
                 </SortableContext>
 
@@ -70,7 +92,7 @@ function ColumnContainer({ column, tasks }: { column: typeof COLUMNS[0], tasks: 
     )
 }
 
-export function KanbanBoard({ tasks, onTaskMove }: KanbanBoardProps) {
+export function KanbanBoard({ tasks, onTaskMove, onAddTask, onMarkComplete }: KanbanBoardProps) {
     const [activeTask, setActiveTask] = useState<Task | null>(null)
 
     const sensors = useSensors(
@@ -144,6 +166,8 @@ export function KanbanBoard({ tasks, onTaskMove }: KanbanBoardProps) {
                         key={col.id}
                         column={col}
                         tasks={tasksByStatus[col.id] || []}
+                        onAddTask={onAddTask}
+                        onMarkComplete={onMarkComplete}
                     />
                 ))}
             </div>
