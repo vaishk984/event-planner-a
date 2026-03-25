@@ -117,6 +117,31 @@ select {
   background: #d35400;
 }
 
+/* Horizontal tab scrollbar (kept local to avoid global layout shifts) */
+.tab-scrollbar {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #e67e22 #fef3e2;
+}
+
+.tab-scrollbar::-webkit-scrollbar {
+  height: 8px;
+}
+
+.tab-scrollbar::-webkit-scrollbar-track {
+  background: #fef3e2;
+  border-radius: 9999px;
+}
+
+.tab-scrollbar::-webkit-scrollbar-thumb {
+  background: #e67e22;
+  border-radius: 9999px;
+}
+
+.tab-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #d35400;
+}
+
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);

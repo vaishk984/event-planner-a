@@ -233,8 +233,8 @@ export async function createTask(formData: FormData) {
             .single()
 
         if (error) {
-            logger.error('Failed to create task', error)
-            return { error: 'Failed to create task' }
+            logger.error('Failed to create task:', error)
+            return { error: `Failed to create task: ${(error as any).message || JSON.stringify(error)}` }
         }
 
         revalidatePath('/planner/tasks')

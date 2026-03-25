@@ -71,8 +71,8 @@ export function EventWorkspaceLayout({
 
             {/* Tab Navigation */}
             <div className="bg-white rounded-xl border border-orange-100 shadow-sm">
-                <div className="overflow-x-auto overflow-y-hidden px-1 py-1">
-                    <div className="flex gap-1 min-w-max pb-1">
+                <div className="tab-scrollbar overflow-x-auto overflow-y-hidden overscroll-x-contain px-1 py-1">
+                    <div className="flex gap-1 min-w-max">
                         {TABS.map((tab) => {
                             const Icon = tab.icon
                             const isActive = activeTab === tab.id

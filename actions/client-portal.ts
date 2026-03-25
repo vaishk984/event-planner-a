@@ -652,6 +652,31 @@ export async function updateProposalStatus(token: string, status: string, feedba
     }
 
     if ((updatedEvents || []).length > 0) {
+        const updatedEventId = updatedEvents[0]?.id
+        if (updatedEventId) {
+            const { data: latestSnapshot } = await supabase
+                .from('proposal_snapshots')
+                .select('id')
+                .eq('event_id', updatedEventId)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle()
+
+            if (latestSnapshot?.id) {
+                const snapshotSyncPayload: { status: string; client_feedback?: string } = { status }
+                if (feedback) snapshotSyncPayload.client_feedback = feedback
+
+                const { error: snapshotSyncError } = await supabase
+                    .from('proposal_snapshots')
+                    .update(snapshotSyncPayload)
+                    .eq('id', latestSnapshot.id)
+
+                if (snapshotSyncError) {
+                    console.error('Error syncing latest snapshot status from event update:', snapshotSyncError)
+                }
+            }
+        }
+
         return { success: true }
     }
 
@@ -917,6 +942,31 @@ export async function updateFinalProposalStatus(token: string, status: string, f
     }
 
     if ((updatedEvents || []).length > 0) {
+        const updatedEventId = updatedEvents[0]?.id
+        if (updatedEventId) {
+            const { data: latestSnapshot } = await supabase
+                .from('proposal_snapshots')
+                .select('id')
+                .eq('event_id', updatedEventId)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle()
+
+            if (latestSnapshot?.id) {
+                const snapshotSyncPayload: { status: string; client_feedback?: string } = { status }
+                if (feedback) snapshotSyncPayload.client_feedback = feedback
+
+                const { error: snapshotSyncError } = await supabase
+                    .from('proposal_snapshots')
+                    .update(snapshotSyncPayload)
+                    .eq('id', latestSnapshot.id)
+
+                if (snapshotSyncError) {
+                    console.error('Error syncing latest snapshot status from final event update:', snapshotSyncError)
+                }
+            }
+        }
+
         return { success: true }
     }
 
@@ -988,4 +1038,28 @@ export async function generateProposalToken(eventId: string) {
 
     revalidatePath(`/planner/events/${eventId}`)
     return { success: true, token }
+}
+
+/**
+ * Save builder progress as draft status.
+ */
+export async function saveProposalDraft(eventId: string) {
+    const supabase = await createClient()
+    const session = await getSession();
+
+    if (!session?.userId) return { error: 'Unauthorized' }
+
+    const { error } = await supabase
+        .from('events')
+        .update({ proposal_status: 'draft' })
+        .eq('id', eventId)
+        .eq('planner_id', session?.userId)
+
+    if (error) {
+        console.error('saveProposalDraft error:', error)
+        return { error: 'Failed to save draft' }
+    }
+
+    revalidatePath(`/planner/events/${eventId}/builder`)
+    return { success: true }
 }
