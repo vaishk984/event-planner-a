@@ -1,10 +1,17 @@
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Task } from "@/lib/types/task"
-import { Clock, MoreHorizontal, User, Building2, UserCheck } from "lucide-react"
+import { CheckCircle2, Clock, MoreHorizontal, User, Building2, UserCheck } from "lucide-react"
 
 interface TaskCardProps {
     task: Task
+    onMarkComplete?: (taskId: string) => void
 }
 
 const PRIORITY_COLORS = {
@@ -26,7 +33,7 @@ const ASSIGNEE_ICONS = {
     vendor: Building2,
 }
 
-export function TaskCard({ task }: TaskCardProps) {
+export function TaskCard({ task, onMarkComplete }: TaskCardProps) {
     const assigneeType = task.assigneeType || 'planner'
     const AssigneeIcon = ASSIGNEE_ICONS[assigneeType]
 
@@ -41,9 +48,26 @@ export function TaskCard({ task }: TaskCardProps) {
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold capitalize ${PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.medium}`}>
                     {task.priority}
                 </span>
-                <button className="text-gray-400 hover:text-gray-600">
-                    <MoreHorizontal className="w-4 h-4" />
-                </button>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <button
+                            className="text-gray-400 hover:text-gray-600"
+                            aria-label="Task actions"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <MoreHorizontal className="w-4 h-4" />
+                        </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        {task.status !== 'completed' && task.status !== 'verified' && (
+                            <DropdownMenuItem onClick={() => onMarkComplete?.(task.id)}>
+                                <CheckCircle2 className="w-4 h-4 mr-2 text-green-600" />
+                                Mark Complete
+                            </DropdownMenuItem>
+                        )}
+                    </DropdownMenuContent>
+                </DropdownMenu>
             </div>
 
             <h4 className="text-sm font-semibold text-gray-900 mb-1 leading-tight">{task.title}</h4>
