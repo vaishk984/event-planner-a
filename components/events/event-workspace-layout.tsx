@@ -70,29 +70,31 @@ export function EventWorkspaceLayout({
             </div>
 
             {/* Tab Navigation */}
-            <div className="bg-white rounded-xl border border-orange-100 shadow-sm p-1 overflow-x-auto">
-                <div className="flex gap-1 min-w-max">
-                    {TABS.map((tab) => {
-                        const Icon = tab.icon
-                        const isActive = activeTab === tab.id
-                        const href = tab.href ? `${basePath}${tab.href}` : basePath
+            <div className="bg-white rounded-xl border border-orange-100 shadow-sm">
+                <div className="overflow-x-auto overflow-y-hidden px-1 py-1">
+                    <div className="flex gap-1 min-w-max pb-1">
+                        {TABS.map((tab) => {
+                            const Icon = tab.icon
+                            const isActive = activeTab === tab.id
+                            const href = tab.href ? `${basePath}${tab.href}` : basePath
 
-                        return (
-                            <Link
-                                key={tab.id}
-                                href={href}
-                                className={cn(
-                                    "flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all whitespace-nowrap",
-                                    isActive
-                                        ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-sm"
-                                        : "text-gray-600 hover:bg-orange-50 hover:text-orange-700"
-                                )}
-                            >
-                                <Icon className="w-4 h-4" />
-                                {tab.label}
-                            </Link>
-                        )
-                    })}
+                            return (
+                                <Link
+                                    key={tab.id}
+                                    href={href}
+                                    className={cn(
+                                        "flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all whitespace-nowrap",
+                                        isActive
+                                            ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-sm"
+                                            : "text-gray-600 hover:bg-orange-50 hover:text-orange-700"
+                                    )}
+                                >
+                                    <Icon className="w-4 h-4" />
+                                    {tab.label}
+                                </Link>
+                            )
+                        })}
+                    </div>
                 </div>
             </div>
 

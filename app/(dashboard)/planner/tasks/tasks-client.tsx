@@ -36,6 +36,7 @@ export function TasksClient({ initialTasks }: TasksClientProps) {
     const [showCreateDialog, setShowCreateDialog] = useState(false)
 
     const handleTaskMove = async (taskId: string, newStatus: TaskStatus) => {
+        const previousStatus = tasks.find(task => task.id === taskId)?.status
         setTasks(prev => prev.map(task =>
             task.id === taskId ? { ...task, status: newStatus } : task
         ))
@@ -46,6 +47,11 @@ export function TasksClient({ initialTasks }: TasksClientProps) {
 
         const result = await updateTask(formData)
         if (result.error) {
+            if (previousStatus) {
+                setTasks(prev => prev.map(task =>
+                    task.id === taskId ? { ...task, status: previousStatus } : task
+                ))
+            }
             toast.error("Failed to update task")
         } else {
             toast.success("Task moved")
@@ -216,7 +222,7 @@ function CreateTaskDialog({
                 </Button>
             </CardHeader>
             <CardContent>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Event selector */}
                     <div>
                         <label className="text-sm font-medium text-gray-700 mb-1 block">Event *</label>

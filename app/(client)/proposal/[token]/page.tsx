@@ -166,6 +166,15 @@ export default function ClientProposalPage({ params }: { params: Promise<{ token
         }
     }
 
+    const handleDownloadPdf = () => {
+        const proposalTitle = proposal?.eventName
+            ? `${proposal.eventName} - Proposal`
+            : 'Proposal'
+        window.document.title = proposalTitle
+        window.print()
+        toast.success('Print dialog opened. Choose "Save as PDF" to download.')
+    }
+
     if (loading) {
         return (
             <div className="min-h-screen flex items-center justify-center">
@@ -186,9 +195,9 @@ export default function ClientProposalPage({ params }: { params: Promise<{ token
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-rose-50">
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 print:bg-white">
             {/* Header */}
-            <header className="bg-white/80 backdrop-blur-sm border-b sticky top-0 z-50">
+            <header className="bg-white/90 backdrop-blur-sm border-b border-slate-200 sticky top-0 z-50 print:static print:border-b-0">
                 <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-rose-500 flex items-center justify-center">
@@ -199,14 +208,14 @@ export default function ClientProposalPage({ params }: { params: Promise<{ token
                             <p className="text-xs text-gray-500">Event Proposal</p>
                         </div>
                     </div>
-                    <Badge className="bg-amber-100 text-amber-700">
+                    <Badge className="bg-slate-100 text-slate-700 border border-slate-200">
                         <Clock className="w-3 h-3 mr-1" /> Valid until {proposal.validUntil}
                     </Badge>
                 </div>
             </header>
 
             {/* Hero */}
-            <div className="bg-gradient-to-r from-orange-500 via-rose-500 to-pink-500 text-white">
+            <div className="bg-gradient-to-r from-slate-800 via-slate-700 to-blue-800 text-white print:rounded-none">
                 <div className="max-w-5xl mx-auto px-4 py-16 text-center">
                     <p className="text-white/70 uppercase tracking-wider text-sm mb-2">Your Event Proposal</p>
                     <h1 className="text-4xl md:text-5xl font-bold mb-6">{proposal.eventName}</h1>
@@ -246,15 +255,15 @@ export default function ClientProposalPage({ params }: { params: Promise<{ token
                 )}
 
                 {/* Personal Message */}
-                <Card className="mb-8 bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200">
+                <Card className="mb-8 bg-gradient-to-r from-slate-50 to-blue-50 border-slate-200">
                     <CardContent className="py-6">
                         <div className="flex items-start gap-4">
                             <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
                                 <Heart className="w-6 h-6 text-amber-600" />
                             </div>
                             <div>
-                                <p className="font-medium text-amber-800 mb-2">A Note from Your Planner</p>
-                                <p className="text-amber-700 whitespace-pre-line text-sm">{proposal.personalMessage}</p>
+                                <p className="font-medium text-slate-800 mb-2">A Note from Your Planner</p>
+                                <p className="text-slate-700 whitespace-pre-line text-sm">{proposal.personalMessage}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -271,16 +280,16 @@ export default function ClientProposalPage({ params }: { params: Promise<{ token
                         proposal.categories.map((category: ProposalCategory, idx: number) => {
                             const Icon = getCategoryIcon(category.icon)
                             return (
-                                <Card key={`${category.id}-${idx}`} className="overflow-hidden hover:shadow-lg transition-shadow">
+                                <Card key={`${category.id}-${idx}`} className="overflow-hidden border-slate-200 hover:shadow-md transition-shadow">
                                     <div className="flex">
-                                        <div className="w-16 bg-gradient-to-b from-orange-500 to-rose-500 flex items-center justify-center">
+                                        <div className="w-16 bg-gradient-to-b from-slate-700 to-blue-700 flex items-center justify-center">
                                             <Icon className="w-6 h-6 text-white" />
                                         </div>
                                         <div className="flex-1 p-5">
                                             <div className="flex items-start justify-between mb-3">
                                                 <div>
                                                     <h3 className="text-lg font-bold text-gray-900">{category.name}</h3>
-                                                    <p className="text-orange-600 font-medium">{category.vendor.name}</p>
+                                                    <p className="text-slate-700 font-medium">{category.vendor.name}</p>
                                                     <div className="flex items-center gap-1 mt-1">
                                                         <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
                                                         <span className="text-sm text-gray-600">{category.vendor.rating}</span>
@@ -299,7 +308,7 @@ export default function ClientProposalPage({ params }: { params: Promise<{ token
                                             </div>
                                             <div className="flex flex-wrap gap-2">
                                                 {category.items.map((item: string, i: number) => (
-                                                    <span key={i} className="inline-flex items-center gap-1 text-sm bg-green-50 text-green-700 px-3 py-1 rounded-full">
+                                                    <span key={i} className="inline-flex items-center gap-1 text-sm bg-slate-100 text-slate-700 px-3 py-1 rounded-full border border-slate-200">
                                                         <Check className="w-3 h-3" /> {item}
                                                     </span>
                                                 ))}
@@ -314,7 +323,7 @@ export default function ClientProposalPage({ params }: { params: Promise<{ token
 
                 {/* Event Timeline / Runsheet */}
                 <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                    <Clock className="w-5 h-5 text-orange-500" />
+                    <Clock className="w-5 h-5 text-blue-600" />
                     Event Schedule
                 </h2>
                 <Card className="mb-8 overflow-hidden">
@@ -367,7 +376,7 @@ export default function ClientProposalPage({ params }: { params: Promise<{ token
 
 
                 {/* Total */}
-                <Card className="bg-gradient-to-r from-gray-900 to-gray-800 text-white mb-8">
+                <Card className="bg-gradient-to-r from-slate-900 to-slate-700 text-white mb-8">
                     <CardContent className="py-6">
                         <div className="flex items-center justify-between">
                             <div>
@@ -391,8 +400,8 @@ export default function ClientProposalPage({ params }: { params: Promise<{ token
                 </Card>
 
                 {/* Actions */}
-                <div className="sticky bottom-0 bg-white/95 backdrop-blur-sm border-t -mx-4 px-4 py-4">
-                    <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
+                <div className="sticky bottom-0 bg-white/95 backdrop-blur-sm border-t -mx-4 px-4 py-4 print:hidden">
+                    <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-4">
                         <div>
                             {!approved && (
                                 <Button
@@ -404,8 +413,8 @@ export default function ClientProposalPage({ params }: { params: Promise<{ token
                                 </Button>
                             )}
                         </div>
-                        <div className="flex gap-3">
-                            <Button variant="outline" className="gap-2" onClick={() => window.print()}>
+                        <div className="flex flex-wrap gap-3">
+                            <Button variant="outline" className="gap-2" onClick={handleDownloadPdf}>
                                 <Download className="w-4 h-4" /> Download PDF
                             </Button>
                             <Button
@@ -452,7 +461,7 @@ export default function ClientProposalPage({ params }: { params: Promise<{ token
                 )}
 
                 {/* Contact Planner */}
-                <div className="mt-12 text-center">
+                <div className="mt-12 text-center print:hidden">
                     <p className="text-gray-500 mb-4">Questions about this proposal?</p>
                     <div className="flex items-center justify-center gap-4">
                         <Button variant="outline" className="gap-2">
@@ -466,7 +475,7 @@ export default function ClientProposalPage({ params }: { params: Promise<{ token
             </div>
 
             {/* Footer */}
-            <footer className="border-t bg-white/50 py-6">
+            <footer className="border-t bg-white/50 py-6 print:hidden">
                 <div className="max-w-5xl mx-auto px-4 text-center text-sm text-gray-400">
                     <p>This proposal is valid until {proposal.validUntil} • Prices subject to change after validity period</p>
                 </div>
