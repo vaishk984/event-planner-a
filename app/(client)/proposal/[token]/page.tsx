@@ -167,7 +167,10 @@ export default function ClientProposalPage({ params }: { params: Promise<{ token
     }
 
     const handleDownloadPdf = () => {
-        window.document.title = `${proposal.eventName} - Proposal`
+        const proposalTitle = proposal?.eventName
+            ? `${proposal.eventName} - Proposal`
+            : 'Proposal'
+        window.document.title = proposalTitle
         window.print()
         toast.success('Print dialog opened. Choose "Save as PDF" to download.')
     }
