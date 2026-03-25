@@ -68,7 +68,13 @@ export default function InvoicesPage() {
 
     const fetchInvoices = async () => {
         const result = await getInvoices()
-        setInvoices(result.data || [])
+        const nextInvoices = result.data || []
+        setInvoices(nextInvoices)
+        setSelectedInvoice((prev) => {
+            if (!nextInvoices.length) return null
+            if (!prev) return nextInvoices[0]
+            return nextInvoices.find((invoice) => invoice.id === prev.id) || nextInvoices[0]
+        })
         setLoading(false)
     }
 
@@ -115,79 +121,177 @@ export default function InvoicesPage() {
     }
 
     const buildInvoicePrintHtml = (invoice: Invoice) => {
+        const escapeHtml = (value: string) => value
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;')
+
+        const formatCurrency = (amount: number) => `₹${(amount || 0).toLocaleString('en-IN')}`
+
         const created = new Date(invoice.created_at).toLocaleDateString('en-IN')
         const due = invoice.due_date ? new Date(invoice.due_date).toLocaleDateString('en-IN') : 'N/A'
+        const invoiceLabel = escapeHtml(invoice.invoice_number || 'INVOICE')
+        const clientName = escapeHtml(invoice.client_name || 'Client')
+        const clientEmail = escapeHtml(invoice.client_email || '')
+        const eventName = escapeHtml(invoice.events?.name || 'Event')
+        const statusLabel = escapeHtml(getStatusLabel(invoice.status))
 
         return `<!doctype html>
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>${invoice.invoice_number}</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>${invoiceLabel}</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 32px; color: #111827; }
-        .header { display: flex; justify-content: space-between; align-items: start; border-bottom: 2px solid #6366f1; padding-bottom: 12px; margin-bottom: 20px; }
-        .title { font-size: 30px; font-weight: 700; color: #4f46e5; margin: 0; }
-        .meta { color: #6b7280; font-size: 13px; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 20px; }
-        .label { color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; background: #f5f7fb; color: #0f172a; }
+        .page { max-width: 900px; margin: 0 auto; padding: 28px; }
+        .card { background: #ffffff; border: 1px solid #dbe4f0; border-radius: 16px; padding: 28px; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e2e8f0; padding-bottom: 16px; margin-bottom: 20px; }
+        .brand { color: #1d4ed8; font-weight: 700; letter-spacing: 0.02em; font-size: 14px; }
+        .title { font-size: 30px; font-weight: 700; margin: 4px 0 0; color: #111827; }
+        .meta { color: #64748b; font-size: 13px; line-height: 1.6; text-align: right; }
+        .pill { display: inline-block; font-size: 12px; font-weight: 600; border: 1px solid #cbd5e1; color: #334155; border-radius: 999px; padding: 4px 10px; margin-top: 8px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 18px 0 24px; }
+        .section { border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; }
+        .label { color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
         .value { font-size: 16px; font-weight: 600; }
-        .totals { margin-left: auto; width: 320px; }
-        .row { display: flex; justify-content: space-between; padding: 6px 0; color: #374151; }
-        .grand { border-top: 1px solid #e5e7eb; margin-top: 8px; padding-top: 10px; font-size: 22px; font-weight: 700; color: #111827; }
-        .status { margin-top: 16px; font-size: 13px; color: #4b5563; }
-        @media print { body { margin: 20px; } }
+        .muted { color: #64748b; font-size: 13px; }
+        .table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+        .table th, .table td { border-bottom: 1px solid #e2e8f0; padding: 10px 8px; font-size: 14px; }
+        .table th { color: #64748b; font-weight: 600; text-align: left; }
+        .table td:last-child, .table th:last-child { text-align: right; }
+        .totals { margin-left: auto; width: 340px; margin-top: 18px; }
+        .row { display: flex; justify-content: space-between; padding: 7px 0; color: #334155; }
+        .grand { border-top: 2px solid #dbe4f0; margin-top: 8px; padding-top: 12px; font-size: 22px; font-weight: 700; color: #0f172a; }
+        .footer { margin-top: 28px; color: #64748b; font-size: 12px; text-align: center; }
+        @media print {
+            body { background: #ffffff; }
+            .page { max-width: none; margin: 0; padding: 0; }
+            .card { border: none; border-radius: 0; padding: 0; }
+        }
     </style>
 </head>
 <body>
-    <div class="header">
-        <div>
-            <h1 class="title">INVOICE</h1>
-            <div class="meta">${invoice.invoice_number}</div>
-        </div>
-        <div class="meta">Created: ${created}<br/>Due: ${due}</div>
-    </div>
+    <div class="page">
+        <div class="card">
+            <div class="header">
+                <div>
+                    <div class="brand">PlannerOS Billing</div>
+                    <h1 class="title">Invoice</h1>
+                    <div class="muted">${invoiceLabel}</div>
+                </div>
+                <div class="meta">
+                    Created: ${created}<br/>
+                    Due: ${due}<br/>
+                    <span class="pill">${statusLabel}</span>
+                </div>
+            </div>
 
-    <div class="grid">
-        <div>
-            <div class="label">Bill To</div>
-            <div class="value">${invoice.client_name || 'Client'}</div>
-            <div class="meta">${invoice.client_email || ''}</div>
-        </div>
-        <div style="text-align:right">
-            <div class="label">Event</div>
-            <div class="value">${invoice.events?.name || 'Event'}</div>
-        </div>
-    </div>
+            <div class="grid">
+                <div class="section">
+                    <div class="label">Bill To</div>
+                    <div class="value">${clientName}</div>
+                    <div class="muted">${clientEmail}</div>
+                </div>
+                <div class="section">
+                    <div class="label">Event</div>
+                    <div class="value">${eventName}</div>
+                    <div class="muted">Professional event planning services</div>
+                </div>
+            </div>
 
-    <div class="totals">
-        <div class="row"><span>Subtotal</span><span>₹${(invoice.subtotal || 0).toLocaleString('en-IN')}</span></div>
-        <div class="row"><span>Platform Fee (2%)</span><span>₹${(invoice.platform_fee || 0).toLocaleString('en-IN')}</span></div>
-        <div class="row grand"><span>Total</span><span>₹${(invoice.total || 0).toLocaleString('en-IN')}</span></div>
-        <div class="status">Status: ${getStatusLabel(invoice.status)}</div>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Description</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Event planning services</td>
+                        <td>${formatCurrency(invoice.subtotal || 0)}</td>
+                    </tr>
+                    <tr>
+                        <td>Platform fee (2%)</td>
+                        <td>${formatCurrency(invoice.platform_fee || 0)}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="totals">
+                <div class="row"><span>Subtotal</span><span>${formatCurrency(invoice.subtotal || 0)}</span></div>
+                <div class="row"><span>Platform Fee</span><span>${formatCurrency(invoice.platform_fee || 0)}</span></div>
+                <div class="row grand"><span>Total</span><span>${formatCurrency(invoice.total || 0)}</span></div>
+            </div>
+
+            <div class="footer">
+                This document is system-generated by PlannerOS.
+            </div>
+        </div>
     </div>
 </body>
 </html>`
     }
 
     const openInvoicePrintDialog = (invoice: Invoice, pdfMode: boolean) => {
+        const html = buildInvoicePrintHtml(invoice)
         const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=1000,height=800')
-        if (!printWindow) {
-            toast.error('Popup blocked. Please allow popups to print or download PDF.')
+
+        const printWithTargetWindow = (targetWindow: Window) => {
+            targetWindow.document.open()
+            targetWindow.document.write(html)
+            targetWindow.document.close()
+            targetWindow.document.title = invoice.invoice_number || 'Invoice'
+
+            targetWindow.onload = () => {
+                targetWindow.focus()
+                targetWindow.print()
+                targetWindow.onafterprint = () => {
+                    setExporting(false)
+                    targetWindow.close()
+                }
+                // Fallback in case onafterprint is not fired by browser.
+                window.setTimeout(() => setExporting(false), 1200)
+            }
+        }
+
+        if (printWindow) {
+            printWithTargetWindow(printWindow)
+            if (pdfMode) {
+                toast.success('Print dialog opened. Choose "Save as PDF" to download.')
+            }
+            return
+        }
+
+        const iframe = document.createElement('iframe')
+        iframe.style.position = 'fixed'
+        iframe.style.width = '0'
+        iframe.style.height = '0'
+        iframe.style.border = '0'
+        iframe.style.right = '0'
+        iframe.style.bottom = '0'
+        document.body.appendChild(iframe)
+
+        const frameWindow = iframe.contentWindow
+        if (!frameWindow) {
+            document.body.removeChild(iframe)
+            toast.error('Unable to open print view. Please allow popups and try again.')
             setExporting(false)
             return
         }
 
-        printWindow.document.open()
-        printWindow.document.write(buildInvoicePrintHtml(invoice))
-        printWindow.document.close()
-
-        printWindow.onload = () => {
-            printWindow.focus()
-            printWindow.print()
-            if (pdfMode) {
-                toast.success('Print dialog opened. Choose "Save as PDF" as destination.')
+        printWithTargetWindow(frameWindow)
+        window.setTimeout(() => {
+            if (document.body.contains(iframe)) {
+                document.body.removeChild(iframe)
             }
-            setExporting(false)
+        }, 2000)
+        if (pdfMode) {
+            toast.success('Print dialog opened. Choose "Save as PDF" to download.')
         }
     }
 
@@ -631,7 +735,7 @@ function CreateInvoiceDialog({
                 </Button>
             </CardHeader>
             <CardContent>
-                <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div>
                         <label className="text-sm font-medium text-gray-700 mb-1 block">Event *</label>
                         <select
@@ -668,9 +772,9 @@ function CreateInvoiceDialog({
                     </div>
                     <div className="space-y-2">
                         {items.map((item, idx) => (
-                            <div key={idx} className="flex gap-2 items-center">
+                            <div key={idx} className="flex flex-wrap md:flex-nowrap gap-2 items-center">
                                 <Input
-                                    className="flex-1"
+                                    className="flex-1 min-w-[220px]"
                                     value={item.description}
                                     onChange={e => updateItem(idx, 'description', e.target.value)}
                                     placeholder="Description"

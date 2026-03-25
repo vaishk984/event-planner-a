@@ -236,7 +236,7 @@ export default function ProposalPreviewPage() {
             {/* Header */}
             <div className="bg-white border-b sticky top-0 z-10 shadow-sm">
                 <div className="max-w-5xl mx-auto px-6 py-4">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="flex items-center gap-4">
                             <Link href={`/planner/events/${eventId}/proposal`}>
                                 <Button variant="ghost" size="sm">
@@ -248,7 +248,7 @@ export default function ProposalPreviewPage() {
                                 <p className="text-sm text-gray-500">Proposal • Valid until {validUntilStr}</p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-3">
                             <Badge className="bg-blue-100 text-blue-700">Preview Mode</Badge>
                             <Button variant="outline" size="sm" onClick={handlePrintProposal}>
                                 <Download className="w-4 h-4 mr-2" /> PDF
@@ -273,7 +273,7 @@ export default function ProposalPreviewPage() {
                 <div className="max-w-5xl mx-auto px-6 py-16 text-center">
                     <p className="text-white/70 uppercase tracking-wider text-sm mb-2">Event Proposal</p>
                     <h1 className="text-4xl md:text-5xl font-bold mb-6">{event?.name || 'Your Special Day'}</h1>
-                    <div className="flex items-center justify-center gap-8 text-white/90">
+                    <div className="flex items-center justify-center gap-8 text-white/90 flex-wrap">
                         <div className="flex items-center gap-2">
                             <Calendar className="w-5 h-5" />
                             <span>{event?.date || 'Date TBD'}</span>

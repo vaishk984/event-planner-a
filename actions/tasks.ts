@@ -8,6 +8,31 @@ import { z } from 'zod'
 
 const logger = createLogger('Tasks')
 
+function getFormString(formData: FormData, key: string): string | undefined {
+    const value = formData.get(key)
+    if (typeof value !== 'string') return undefined
+    const trimmed = value.trim()
+    return trimmed.length > 0 ? trimmed : undefined
+}
+
+function normalizeDueDateInput(raw?: string): string | null {
+    if (!raw) return null
+
+    // Support yyyy-mm-dd (date input), dd-mm-yyyy, and ISO-like values.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        return `${raw}T00:00:00.000Z`
+    }
+
+    if (/^\d{2}-\d{2}-\d{4}$/.test(raw)) {
+        const normalized = `${raw.slice(6, 10)}-${raw.slice(3, 5)}-${raw.slice(0, 2)}`
+        return `${normalized}T00:00:00.000Z`
+    }
+
+    const parsed = new Date(raw)
+    if (Number.isNaN(parsed.getTime())) return null
+    return parsed.toISOString()
+}
+
 // ============================================================================
 // VALIDATION SCHEMAS
 // ============================================================================
@@ -161,13 +186,13 @@ export async function createTask(formData: FormData) {
 
         // Parse and validate
         const rawData = {
-            eventId: formData.get('eventId') as string,
-            title: formData.get('title') as string,
-            description: formData.get('description') as string,
-            vendorId: formData.get('vendorId') as string,
-            priority: formData.get('priority') as string,
-            dueDate: formData.get('dueDate') as string,
-            notes: formData.get('notes') as string,
+            eventId: getFormString(formData, 'eventId') || '',
+            title: getFormString(formData, 'title') || '',
+            description: getFormString(formData, 'description'),
+            vendorId: getFormString(formData, 'vendorId') || '',
+            priority: getFormString(formData, 'priority') || 'medium',
+            dueDate: getFormString(formData, 'dueDate'),
+            notes: getFormString(formData, 'notes'),
         }
 
         const validation = createTaskSchema.safeParse(rawData)
@@ -190,6 +215,8 @@ export async function createTask(formData: FormData) {
         }
 
         // Insert task
+        const normalizedDueDate = normalizeDueDateInput(validData.dueDate)
+
         const { data, error } = await supabase
             .from('tasks')
             .insert({
@@ -198,7 +225,7 @@ export async function createTask(formData: FormData) {
                 description: validData.description || null,
                 vendor_id: validData.vendorId || null,
                 priority: validData.priority,
-                due_date: validData.dueDate || null,
+                due_date: normalizedDueDate,
                 notes: validData.notes || null,
                 status: 'pending',
             })
@@ -233,13 +260,13 @@ export async function updateTask(formData: FormData) {
         }
 
         const rawData = {
-            id: formData.get('id') as string,
-            title: formData.get('title') as string,
-            description: formData.get('description') as string,
-            priority: formData.get('priority') as string,
-            status: formData.get('status') as string,
-            dueDate: formData.get('dueDate') as string,
-            notes: formData.get('notes') as string,
+            id: getFormString(formData, 'id') || '',
+            title: getFormString(formData, 'title'),
+            description: getFormString(formData, 'description'),
+            priority: getFormString(formData, 'priority'),
+            status: getFormString(formData, 'status'),
+            dueDate: getFormString(formData, 'dueDate'),
+            notes: getFormString(formData, 'notes'),
         }
 
         const validation = updateTaskSchema.safeParse(rawData)
@@ -260,7 +287,7 @@ export async function updateTask(formData: FormData) {
                 updates.completed_at = new Date().toISOString()
             }
         }
-        if (updateData.dueDate !== undefined) updates.due_date = updateData.dueDate
+        if (updateData.dueDate !== undefined) updates.due_date = normalizeDueDateInput(updateData.dueDate)
         if (updateData.notes !== undefined) updates.notes = updateData.notes
 
         const { data, error } = await supabase
