@@ -1,14 +1,97 @@
 'use client'
 
+import { useState } from 'react'
 import { useQuote } from "@/components/providers/quote-provider"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Trash2, FileText, Send, IndianRupee, ArrowLeft } from "lucide-react"
+import { Trash2, FileText, Send, IndianRupee, ArrowLeft, Loader2 } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
+import { toast } from 'sonner'
 
 export default function QuotesPage() {
     const { items, removeFromQuote, total, clearQuote } = useQuote()
+    const [isSending, setIsSending] = useState(false)
+    const [isPreviewing, setIsPreviewing] = useState(false)
+
+    const grandTotal = total * 1.02
+
+    const formatMoney = (amount: number) => `₹${amount.toLocaleString('en-IN')}`
+
+    const buildQuoteMessage = () => {
+        const itemLines = items
+            .map((item, index) => `${index + 1}. ${item.vendorName} (${item.serviceName}) - ${formatMoney(item.price)}`)
+            .join('\n')
+
+        return [
+            'Draft Proposal',
+            '',
+            itemLines,
+            '',
+            `Subtotal: ${formatMoney(total)}`,
+            `Platform Fee (2%): ${formatMoney(total * 0.02)}`,
+            `Total: ${formatMoney(grandTotal)}`,
+            '',
+            'Valid for 7 days from generation.'
+        ].join('\n')
+    }
+
+    const handleClearDraft = () => {
+        if (items.length === 0) {
+            toast.info('Draft is already empty.')
+            return
+        }
+
+        const confirmed = window.confirm('Clear all vendors from this draft proposal?')
+        if (!confirmed) return
+
+        clearQuote()
+        toast.success('Draft cleared successfully.')
+    }
+
+    const handleSendToClient = async () => {
+        if (items.length === 0) {
+            toast.error('Add at least one vendor before sending to the client.')
+            return
+        }
+
+        setIsSending(true)
+        const subject = 'Draft Proposal - Mehta Sangeet'
+        const message = buildQuoteMessage()
+
+        try {
+            if (navigator.share) {
+                await navigator.share({ title: subject, text: message })
+                toast.success('Draft shared successfully.')
+                return
+            }
+
+            await navigator.clipboard.writeText(`${subject}\n\n${message}`)
+            const mailto = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`
+            window.open(mailto, '_blank', 'noopener,noreferrer')
+            toast.success('Draft copied to clipboard and email composer opened.')
+        } catch (error) {
+            console.error('Failed to share draft proposal:', error)
+            toast.error('Could not send draft. Please try again.')
+        } finally {
+            setIsSending(false)
+        }
+    }
+
+    const handlePreviewPdf = () => {
+        if (items.length === 0) {
+            toast.error('Add at least one vendor before previewing the PDF.')
+            return
+        }
+
+        setIsPreviewing(true)
+        try {
+            window.print()
+            toast.success('Print dialog opened. Choose "Save as PDF" to download.')
+        } finally {
+            setIsPreviewing(false)
+        }
+    }
 
     if (items.length === 0) {
         return (
@@ -44,12 +127,25 @@ export default function QuotesPage() {
                     </div>
                 </div>
                 <div className="flex gap-3">
-                    <Button variant="outline" onClick={clearQuote} className="text-red-600 hover:bg-red-50 hover:text-red-700">
+                    <Button variant="outline" onClick={handleClearDraft} className="text-red-600 hover:bg-red-50 hover:text-red-700">
                         Clear Draft
                     </Button>
-                    <Button className="gap-2 bg-indigo-600 hover:bg-indigo-700">
-                        <Send className="w-4 h-4" />
-                        Send to Client
+                    <Button
+                        className="gap-2 bg-indigo-600 hover:bg-indigo-700"
+                        onClick={handleSendToClient}
+                        disabled={isSending}
+                    >
+                        {isSending ? (
+                            <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Sending...
+                            </>
+                        ) : (
+                            <>
+                                <Send className="w-4 h-4" />
+                                Send to Client
+                            </>
+                        )}
                     </Button>
                 </div>
             </div>
@@ -122,13 +218,26 @@ export default function QuotesPage() {
                             <span>Total</span>
                             <span className="flex items-center">
                                 <IndianRupee className="w-5 h-5" />
-                                {(total * 1.02).toLocaleString('en-IN')}
+                                {grandTotal.toLocaleString('en-IN')}
                             </span>
                         </div>
 
-                        <Button className="w-full h-12 text-lg bg-gray-900 hover:bg-black text-white mb-3">
-                            <FileText className="w-4 h-4 mr-2" />
-                            Preview PDF
+                        <Button
+                            className="w-full h-12 text-lg bg-gray-900 hover:bg-black text-white mb-3"
+                            onClick={handlePreviewPdf}
+                            disabled={isPreviewing}
+                        >
+                            {isPreviewing ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Opening...
+                                </>
+                            ) : (
+                                <>
+                                    <FileText className="w-4 h-4 mr-2" />
+                                    Preview PDF
+                                </>
+                            )}
                         </Button>
                         <p className="text-xs text-center text-gray-400">
                             Valid for 7 days from generation.

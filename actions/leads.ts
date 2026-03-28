@@ -15,11 +15,13 @@ const logger = createLogger('Leads')
 const createLeadSchema = z.object({
     name: z.string().min(2, 'Name must be at least 2 characters'),
     email: z.string().email('Invalid email').optional().or(z.literal('')),
-    phone: z.string().min(10, 'Phone must be at least 10 digits'),
+    phone: z.string().min(10, 'Phone must be at least 10 digits').optional().or(z.literal('')),
     eventType: z.string().min(1, 'Event type is required'),
     eventDate: z.string().optional(),
     budgetRange: z.string().optional(),
-    source: z.enum(['website', 'referral', 'social_media', 'advertisement', 'walk_in', 'other']).optional(),
+    source: z
+        .enum(['website', 'referral', 'social_media', 'advertisement', 'walk_in', 'other', 'instagram', 'facebook', 'google', 'email', 'phone', 'walkin'])
+        .optional(),
     notes: z.string().optional(),
 })
 
@@ -36,7 +38,7 @@ export interface Lead {
     planner_id: string;
     name: string;
     email?: string;
-    phone: string;
+    phone?: string;
     event_type: string;
     event_date?: string;
     budget_range?: string;
@@ -131,6 +133,9 @@ export async function createLead(formData: FormData) {
             return { error: 'Unauthorized' }
         }
 
+        const rawSource = formData.get('source') as string
+        const normalizedSource = mapLeadSource(rawSource)
+
         // Parse and validate input
         const rawData = {
             name: formData.get('name') as string,
@@ -138,8 +143,8 @@ export async function createLead(formData: FormData) {
             phone: formData.get('phone') as string,
             eventType: formData.get('eventType') as string,
             eventDate: formData.get('eventDate') as string,
-            budgetRange: formData.get('budgetRange') as string,
-            source: formData.get('source') as string,
+            budgetRange: (formData.get('budgetRange') as string) || normalizeBudgetValue(formData.get('budget')),
+            source: normalizedSource,
             notes: formData.get('notes') as string,
         }
 
@@ -164,7 +169,7 @@ export async function createLead(formData: FormData) {
                 planner_id: session?.userId,
                 name: validData.name,
                 email: validData.email || null,
-                phone: validData.phone,
+                phone: validData.phone || null,
                 event_type: validData.eventType,
                 event_date: validData.eventDate || null,
                 budget_range: validData.budgetRange || null,
@@ -187,6 +192,42 @@ export async function createLead(formData: FormData) {
         logger.error('Unexpected error in createLead', error)
         return { error: 'An unexpected error occurred' }
     }
+}
+
+function mapLeadSource(source?: string): 'website' | 'referral' | 'social_media' | 'advertisement' | 'walk_in' | 'other' {
+    switch (source) {
+        case 'website':
+        case 'referral':
+        case 'social_media':
+        case 'advertisement':
+        case 'walk_in':
+        case 'other':
+            return source
+        case 'instagram':
+        case 'facebook':
+            return 'social_media'
+        case 'google':
+            return 'advertisement'
+        case 'walkin':
+            return 'walk_in'
+        case 'email':
+        case 'phone':
+        default:
+            return 'other'
+    }
+}
+
+function normalizeBudgetValue(budget: FormDataEntryValue | null): string | undefined {
+    if (!budget) {
+        return undefined
+    }
+
+    const numericBudget = Number(budget)
+    if (!Number.isFinite(numericBudget) || numericBudget <= 0) {
+        return undefined
+    }
+
+    return `INR ${Math.round(numericBudget).toLocaleString('en-IN')}`
 }
 
 /**

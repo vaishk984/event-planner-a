@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { createLead } from '@/actions/leads/create-lead'
+import { useRouter } from 'next/navigation'
+import { createLead } from '@/actions/leads'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -9,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 export function LeadForm() {
+    const router = useRouter()
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
@@ -21,7 +23,11 @@ export function LeadForm() {
         if (result?.error) {
             setError(result.error)
             setLoading(false)
+            return
         }
+
+        router.push('/planner/leads')
+        router.refresh()
     }
 
     return (
@@ -143,12 +149,9 @@ export function LeadForm() {
                             <option value="">Select source</option>
                             <option value="referral">Referral</option>
                             <option value="website">Website</option>
-                            <option value="instagram">Instagram</option>
-                            <option value="facebook">Facebook</option>
-                            <option value="google">Google Search</option>
-                            <option value="email">Email</option>
-                            <option value="phone">Phone Call</option>
-                            <option value="walkin">Walk-in</option>
+                            <option value="social_media">Instagram / Facebook</option>
+                            <option value="advertisement">Google / Ads</option>
+                            <option value="walk_in">Walk-in</option>
                             <option value="other">Other</option>
                         </select>
                     </div>

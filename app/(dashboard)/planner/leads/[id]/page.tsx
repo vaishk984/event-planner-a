@@ -18,9 +18,10 @@ export default async function LeadDetailPage({
 
     // Get lead details
     const { data: lead, error } = await supabase
-        .from('leads')
+        .from('clients')
         .select('*')
         .eq('id', id)
+        .eq('status', 'prospect')
         .single()
 
     if (error || !lead) {
@@ -91,12 +92,12 @@ export default async function LeadDetailPage({
                             <div>
                                 <div className="text-sm font-medium text-muted-foreground">Budget</div>
                                 <div className="mt-1">
-                                    {lead.budget ? `₹${lead.budget.toLocaleString('en-IN')}` : '-'}
+                                    {lead.budget_range || '-'}
                                 </div>
                             </div>
                             <div>
                                 <div className="text-sm font-medium text-muted-foreground">Guest Count</div>
-                                <div className="mt-1">{lead.guest_count || '-'}</div>
+                                <div className="mt-1">-</div>
                             </div>
                         </div>
 
