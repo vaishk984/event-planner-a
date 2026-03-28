@@ -162,36 +162,102 @@ export async function createLead(formData: FormData) {
             source: validData.source,
         })
 
-        // Insert into database
-        const { data, error } = await supabase
-            .from('clients')
-            .insert({
-                planner_id: session?.userId,
-                name: validData.name,
-                email: validData.email || null,
-                phone: validData.phone || null,
-                event_type: validData.eventType,
-                event_date: validData.eventDate || null,
-                budget_range: validData.budgetRange || null,
-                source: validData.source || 'other',
-                status: 'prospect',
-                score: score,
-                notes: validData.notes || null,
-            })
-            .select()
-            .single()
+        const basePayload = {
+            planner_id: session?.userId,
+            name: validData.name,
+            email: validData.email || null,
+            // Some deployed schemas still enforce NOT NULL for phone.
+            phone: validData.phone || 'N/A',
+            notes: validData.notes || null,
+        }
 
-        if (error) {
-            logger.error('Failed to create lead', error)
-            return { error: 'Failed to create lead' }
+        const optionalLeadFields = {
+            event_type: validData.eventType,
+            event_date: validData.eventDate || null,
+            budget_range: validData.budgetRange || null,
+            score,
+        }
+
+        const sourceValue = validData.source || 'other'
+        const insertVariants = [
+            { ...basePayload, ...optionalLeadFields, source: sourceValue, status: 'prospect' },
+            { ...basePayload, ...optionalLeadFields, referral_source: sourceValue, status: 'prospect' },
+            { ...basePayload, ...optionalLeadFields, source: sourceValue, status: 'active' },
+            { ...basePayload, ...optionalLeadFields, referral_source: sourceValue, status: 'active' },
+        ]
+
+        let createdLead: Lead | null = null
+        let lastInsertError: {
+            code?: string
+            message?: string
+            details?: string
+        } | null = null
+
+        for (const payloadVariant of insertVariants) {
+            let payload: Record<string, unknown> = { ...payloadVariant }
+
+            // Adapt to schema differences by removing unknown columns reported by PostgREST.
+            for (let attempt = 0; attempt < 8; attempt++) {
+                const { data, error } = await supabase
+                    .from('clients')
+                    .insert(payload)
+                    .select()
+                    .single()
+
+                if (!error && data) {
+                    createdLead = data as Lead
+                    break
+                }
+
+                lastInsertError = error
+
+                const missingColumn = parseMissingColumnFromError(error)
+                if (error?.code === 'PGRST204' && missingColumn && missingColumn in payload) {
+                    delete payload[missingColumn]
+                    continue
+                }
+
+                break
+            }
+
+            if (createdLead) {
+                break
+            }
+        }
+
+        if (!createdLead) {
+            logger.error('Failed to create lead', lastInsertError)
+
+            const errorHint = [
+                lastInsertError?.code,
+                lastInsertError?.message,
+                lastInsertError?.details,
+            ]
+                .filter(Boolean)
+                .join(' | ')
+
+            return {
+                error: errorHint
+                    ? `Failed to create lead: ${errorHint}`
+                    : 'Failed to create lead',
+            }
         }
 
         revalidatePath('/planner/leads')
-        return { data: data as Lead, success: true }
+        return { data: createdLead, success: true }
     } catch (error) {
         logger.error('Unexpected error in createLead', error)
         return { error: 'An unexpected error occurred' }
     }
+}
+
+function parseMissingColumnFromError(error: { code?: string; message?: string } | null): string | null {
+    if (!error?.message) {
+        return null
+    }
+
+    const match = error.message.match(/'([^']+)'\s+column/) ?? error.message.match(/column\s+'([^']+)'/i)
+    return match?.[1] || null
 }
 
 function mapLeadSource(source?: string): 'website' | 'referral' | 'social_media' | 'advertisement' | 'walk_in' | 'other' {
