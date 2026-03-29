@@ -5,7 +5,10 @@ import { supabaseIntakeRepository } from '@/lib/repositories/supabase-intake-rep
 import { supabaseEventRepository } from '@/lib/repositories/supabase-event-repository'
 import { getCurrentUser } from '@/actions/auth/login'
 import { createInitialInvoiceForEvent } from '@/actions/invoices-tasks'
+import { createLogger } from '@/lib/logger'
 import type { Intake, Event, ActionResult } from '@/types/domain'
+
+const logger = createLogger('IntakeActions')
 
 // ============================================
 // QUERY ACTIONS
@@ -164,16 +167,34 @@ export async function convertIntakeToEvent(intakeId: string): Promise<ActionResu
     const eventResult = await supabaseEventRepository.create(eventData as unknown as Omit<Event, 'id' | 'createdAt' | 'updatedAt'>)
 
     if (eventResult.success && eventResult.data) {
-        await createInitialInvoiceForEvent({
-            eventId: eventResult.data.id,
-            eventName: eventResult.data.name,
-            clientName: eventResult.data.clientName,
-            clientEmail: eventResult.data.clientEmail,
-            clientPhone: eventResult.data.clientPhone,
-            budgetMax: eventResult.data.budgetMax,
-            eventDate: eventResult.data.date,
-        })
-        await supabaseIntakeRepository.markConverted(intakeId, eventResult.data.id)
+        // Mark intake converted first. If this fails, surface the failure so UI can show the user.
+        const convertedResult = await supabaseIntakeRepository.markConverted(intakeId, eventResult.data.id)
+        if (!convertedResult.success) {
+            return {
+                success: false,
+                error: convertedResult.error || 'Failed to link intake to converted event',
+                code: convertedResult.code || 'UPDATE_FAILED',
+            }
+        }
+
+        // Invoice seeding should not block successful conversion.
+        try {
+            await createInitialInvoiceForEvent({
+                eventId: eventResult.data.id,
+                eventName: eventResult.data.name,
+                clientName: eventResult.data.clientName,
+                clientEmail: eventResult.data.clientEmail,
+                clientPhone: eventResult.data.clientPhone,
+                budgetMax: eventResult.data.budgetMax,
+                eventDate: eventResult.data.date,
+            })
+        } catch (error) {
+            logger.error('Failed to seed initial invoice for converted intake', error, {
+                intakeId,
+                eventId: eventResult.data.id,
+            })
+        }
+
         revalidatePath('/planner/events')
         revalidatePath('/planner/leads')
         revalidatePath('/planner/invoices')

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -49,8 +50,11 @@ function IntakeCard({
 
     const handleConvert = async () => {
         setConverting(true)
-        await onConvert(intake.id)
-        setConverting(false)
+        try {
+            await onConvert(intake.id)
+        } finally {
+            setConverting(false)
+        }
     }
 
     return (
@@ -203,13 +207,27 @@ export default function EventsPageClient({
     }, [initialEvents, initialIntakes])
 
     const handleConvertIntake = async (intakeId: string) => {
-        const result = await convertIntakeToEvent(intakeId)
-        if (result.success) {
-            startRefresh(() => {
-                router.refresh()
-            })
-        } else {
+        try {
+            const result = await convertIntakeToEvent(intakeId)
+            if (result.success) {
+                setIntakes(prev => prev.filter(intake => intake.id !== intakeId))
+                if (result.data) {
+                    setEvents(prev => [result.data, ...prev])
+                }
+
+                toast.success('Converted to event')
+
+                startRefresh(() => {
+                    router.refresh()
+                })
+                return
+            }
+
             console.error('Failed to convert intake:', result.error)
+            toast.error(result.error || 'Could not convert intake to event')
+        } catch (error) {
+            console.error('Unexpected error while converting intake:', error)
+            toast.error('Unexpected error while converting intake')
         }
     }
 

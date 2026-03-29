@@ -155,7 +155,7 @@ export default function ProposalPage() {
                             <Button variant="outline" size="sm" onClick={() => copyLink(event.publicToken!)}>
                                 <Copy className="w-4 h-4 mr-1" /> Copy Link
                             </Button>
-                            <Link href={`/proposal/${event.publicToken}`} target="_blank">
+                            <Link href={`/planner/events/${id}/proposal/proposal_1`} target="_blank">
                                 <Button variant="outline" size="sm">
                                     <ExternalLink className="w-4 h-4 mr-1" /> Open
                                 </Button>
