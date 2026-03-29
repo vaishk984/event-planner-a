@@ -11,9 +11,11 @@ import { useToast } from '@/components/ui/use-toast'
 import { generateClientToken, getClientAccessDetails } from '@/actions/client-management'
 import { sendFinalProposal, getOrCreateClientToken, sendPlannerMessage, getClientMessages } from '@/actions/client-portal'
 import { useEffect } from 'react'
+import { getEvent } from '@/lib/actions/event-actions'
 
 export default function ClientManagementPage({ params }: { params: Promise<{ id: string }> }) {
     const [event, setEvent] = useState<any>(null)
+    const [capturedRequirements, setCapturedRequirements] = useState<any>(null)
     const [loading, setLoading] = useState(true)
     const [sendingFinal, setSendingFinal] = useState(false)
     const [portalToken, setPortalToken] = useState<string | null>(null)
@@ -39,6 +41,9 @@ export default function ClientManagementPage({ params }: { params: Promise<{ id:
         } else {
             setEvent(data)
         }
+
+        const eventWithCapture = await getEvent(eventId)
+        setCapturedRequirements((eventWithCapture as any)?.requirements || null)
 
         // Load portal token
         const tokenResult = await getOrCreateClientToken(eventId)
@@ -271,6 +276,40 @@ export default function ClientManagementPage({ params }: { params: Promise<{ id:
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Captured Intake Summary */}
+            {capturedRequirements && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Captured Requirements Summary</CardTitle>
+                        <CardDescription>Details submitted through Capture flow and used by workspace planning.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3 text-sm">
+                        <div>
+                            <p className="text-muted-foreground">Food</p>
+                            <p>{(capturedRequirements.food?.cuisines || []).join(', ') || 'Not captured'}</p>
+                        </div>
+                        <div>
+                            <p className="text-muted-foreground">Decor</p>
+                            <p className="capitalize">{capturedRequirements.decor?.style || 'Not captured'}</p>
+                        </div>
+                        <div>
+                            <p className="text-muted-foreground">Entertainment</p>
+                            <p className="capitalize">{capturedRequirements.entertainment?.type || 'Not captured'}</p>
+                        </div>
+                        <div>
+                            <p className="text-muted-foreground">Photography</p>
+                            <p className="capitalize">{capturedRequirements.photography?.package || 'Not captured'}</p>
+                        </div>
+                        {capturedRequirements.specialRequests && (
+                            <div>
+                                <p className="text-muted-foreground">Special Requests</p>
+                                <p>{capturedRequirements.specialRequests}</p>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Client Portal Dashboard Link */}
             <Card className="border-orange-200 bg-orange-50/20">

@@ -80,6 +80,17 @@ export default function EventOverviewPage() {
         overall: 25,
     }
 
+    const requirements = (event as Event & {
+        requirements?: {
+            food?: { dietary?: string[]; cuisines?: string[]; servingStyle?: string }
+            decor?: { style?: string; colorMood?: string; intensity?: string }
+            entertainment?: { type?: string; genres?: string[] }
+            photography?: { package?: string; preWedding?: boolean; drone?: boolean }
+            services?: { makeup?: boolean; mehendi?: boolean; anchor?: boolean; valet?: boolean; pandit?: boolean }
+            specialRequests?: string
+        }
+    }).requirements || {}
+
     return (
         <div className="space-y-6">
             {/* Quick Stats Row */}
@@ -242,6 +253,80 @@ export default function EventOverviewPage() {
                                     </Link>
                                 ))}
                             </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Captured Requirements Summary */}
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-lg">Captured Requirements</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                <div>
+                                    <p className="text-gray-500 mb-1">Food Preferences</p>
+                                    <p className="text-gray-800">
+                                        {(requirements.food?.cuisines || []).join(', ') || 'Not captured'}
+                                    </p>
+                                    <p className="text-gray-600 mt-1">
+                                        {(requirements.food?.dietary || []).join(', ') || 'No dietary preferences captured'}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-gray-500 mb-1">Decor Preferences</p>
+                                    <p className="text-gray-800 capitalize">
+                                        {requirements.decor?.style || 'Not captured'}
+                                    </p>
+                                    <p className="text-gray-600 mt-1 capitalize">
+                                        {requirements.decor?.colorMood || 'No color mood captured'}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-gray-500 mb-1">Entertainment</p>
+                                    <p className="text-gray-800 capitalize">
+                                        {requirements.entertainment?.type || 'Not captured'}
+                                    </p>
+                                    <p className="text-gray-600 mt-1">
+                                        {(requirements.entertainment?.genres || []).join(', ') || 'No genres captured'}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-gray-500 mb-1">Photography</p>
+                                    <p className="text-gray-800 capitalize">
+                                        {requirements.photography?.package || 'Not captured'}
+                                    </p>
+                                    <p className="text-gray-600 mt-1">
+                                        {requirements.photography?.preWedding ? 'Pre-wedding: Yes' : 'Pre-wedding: No'} • {requirements.photography?.drone ? 'Drone: Yes' : 'Drone: No'}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <p className="text-gray-500 mb-2">Additional Services</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {requirements.services?.makeup && <Badge variant="outline">Makeup</Badge>}
+                                    {requirements.services?.mehendi && <Badge variant="outline">Mehendi</Badge>}
+                                    {requirements.services?.anchor && <Badge variant="outline">Anchor</Badge>}
+                                    {requirements.services?.valet && <Badge variant="outline">Valet</Badge>}
+                                    {requirements.services?.pandit && <Badge variant="outline">Pandit</Badge>}
+                                    {!requirements.services?.makeup &&
+                                        !requirements.services?.mehendi &&
+                                        !requirements.services?.anchor &&
+                                        !requirements.services?.valet &&
+                                        !requirements.services?.pandit && (
+                                            <span className="text-sm text-gray-600">No additional services captured</span>
+                                        )}
+                                </div>
+                            </div>
+
+                            {requirements.specialRequests && (
+                                <div className="pt-3 border-t">
+                                    <p className="text-gray-500 mb-1">Special Requests from Capture</p>
+                                    <p className="text-sm bg-orange-50 p-3 rounded-lg text-gray-700">
+                                        {requirements.specialRequests}
+                                    </p>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </div>
