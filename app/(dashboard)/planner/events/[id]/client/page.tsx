@@ -118,7 +118,7 @@ export default function ClientManagementPage({ params }: { params: Promise<{ id:
         : ''
 
     const finalUrl = event?.final_proposal_token
-        ? `${window.location.origin}/proposal/${event.final_proposal_token}`
+        ? `${window.location.origin}/proposal/final_${event.final_proposal_token}`
         : ''
 
     const portalUrl = portalToken

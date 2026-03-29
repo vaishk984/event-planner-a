@@ -10,6 +10,21 @@ import type { Intake, Event, ActionResult } from '@/types/domain'
 
 const logger = createLogger('IntakeActions')
 
+function normalizeDateForDb(value?: string | null): string | undefined {
+    if (!value) return undefined
+
+    const trimmed = value.trim()
+    if (!trimmed) return undefined
+
+    // Accept ISO datetime/date and persist only yyyy-mm-dd for DATE columns.
+    if (/^\d{4}-\d{2}-\d{2}(T.*)?$/.test(trimmed)) {
+        return trimmed.slice(0, 10)
+    }
+
+    // Reject any non-date format instead of sending invalid values to DB.
+    return undefined
+}
+
 // ============================================
 // QUERY ACTIONS
 // ============================================
@@ -137,11 +152,14 @@ export async function convertIntakeToEvent(intakeId: string): Promise<ActionResu
         .filter((value): value is string => Boolean(value && value.trim()))
         .join('\n\n')
 
+    const normalizedStartDate = normalizeDateForDb(intake.eventDate) || new Date().toISOString().slice(0, 10)
+    const normalizedEndDate = normalizeDateForDb(intake.eventEndDate)
+
     const eventData = {
         plannerId: user.id,
         type: intake.eventType || 'wedding',
         name: `${intake.clientName}'s ${intake.eventType || 'Event'}`,
-        date: intake.eventDate || new Date().toISOString().split('T')[0],
+        date: normalizedStartDate,
         status: 'planning' as const,
 
         // Required fields with defaults
@@ -156,7 +174,7 @@ export async function convertIntakeToEvent(intakeId: string): Promise<ActionResu
 
         // Optional fields
         clientEmail: intake.email,
-        endDate: intake.eventEndDate,
+        endDate: normalizedEndDate,
         venueName: intake.personalVenue?.name,
         venueAddress: intake.personalVenue?.address,
         notes: intakeNotes || undefined,
