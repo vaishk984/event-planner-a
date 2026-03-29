@@ -89,26 +89,26 @@ export default function ClientProposalPage({ params }: { params: Promise<{ token
     useEffect(() => {
         async function loadProposal() {
             try {
-                const isFinalToken = token.startsWith('final_')
-                setIsFinal(isFinalToken)
+                // Resolve final proposals first so older non-prefixed links
+                // still execute the final approval flow.
+                const finalResult = await getFinalProposal(token)
+                if (!('error' in finalResult) || !finalResult.error) {
+                    setIsFinal(true)
+                    if ('proposal' in finalResult) {
+                        setProposal(finalResult.proposal as ProposalData)
+                        setApproved(('status' in finalResult ? finalResult.status : undefined) === 'approved')
+                    }
+                    return
+                }
 
-                if (isFinalToken) {
-                    const result = await getFinalProposal(token)
-                    if ('error' in result && result.error) {
-                        setError(result.error || 'Final proposal not found')
-                    } else if ('proposal' in result) {
-                        setProposal(result.proposal as ProposalData)
-                        setApproved(('status' in result ? result.status : undefined) === 'approved')
-                    }
+                setIsFinal(false)
+                const result = await getPublicProposalDetails(token)
+                if (result.error || !result.proposal) {
+                    setError(result.error || 'Failed to load proposal')
                 } else {
-                    const result = await getPublicProposalDetails(token)
-                    if (result.error || !result.proposal) {
-                        setError(result.error || 'Failed to load proposal')
-                    } else {
-                        const proposalData = result.proposal as ProposalData
-                        setProposal(proposalData)
-                        setApproved(proposalData.status === 'approved')
-                    }
+                    const proposalData = result.proposal as ProposalData
+                    setProposal(proposalData)
+                    setApproved(proposalData.status === 'approved')
                 }
             } catch (err) {
                 console.error(err)
