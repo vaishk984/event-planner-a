@@ -141,7 +141,7 @@ export default function ProposalPreviewPage() {
         try {
             setApproving(true)
 
-            let finalToken = event?.finalProposalToken
+            let finalToken = (event as (Event & { finalProposalToken?: string }) | null)?.finalProposalToken
             if (!finalToken) {
                 const finalResult = await sendFinalProposal(eventId)
                 if ('error' in finalResult && finalResult.error) {
