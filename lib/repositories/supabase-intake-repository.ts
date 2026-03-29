@@ -179,6 +179,25 @@ class SupabaseIntakeRepositoryClass extends SupabaseBaseRepository<Intake> {
     }
 
     /**
+     * Find intake by converted event ID.
+     * Useful for older rows where events.submission_id was not persisted.
+     */
+    async findByConvertedEventId(eventId: string): Promise<Intake | null> {
+        const supabase = await this.getClient()
+
+        const { data, error } = await supabase
+            .from(this.tableName)
+            .select('*')
+            .eq('event_id', eventId)
+            .order('submitted_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+        if (error || !data) return null
+        return this.fromDb(data)
+    }
+
+    /**
      * Update intake status
      */
     async updateStatus(id: string, status: IntakeStatus): Promise<ActionResult<Intake>> {

@@ -15,7 +15,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { approveEvent, getEvent, updateEventStatus } from '@/lib/actions/event-actions'
 import { getRequestsForEvent } from '@/actions/booking'
-import { generateProposalToken } from '@/actions/client-portal'
+import { generateProposalToken, sendFinalProposal, updateFinalProposalStatus } from '@/actions/client-portal'
 import { toast } from 'sonner'
 import type { Event, EventVendor } from '@/types/domain'
 
@@ -141,9 +141,30 @@ export default function ProposalPreviewPage() {
         try {
             setApproving(true)
 
+            let finalToken = (event as (Event & { finalProposalToken?: string }) | null)?.finalProposalToken
+            if (!finalToken) {
+                const finalResult = await sendFinalProposal(eventId)
+                if ('error' in finalResult && finalResult.error) {
+                    alert(`Failed to create final snapshot: ${finalResult.error}`)
+                    return
+                }
+
+                if ('token' in finalResult && finalResult.token) {
+                    finalToken = finalResult.token
+                }
+            }
+
+            if (finalToken) {
+                const approveSnapshotResult = await updateFinalProposalStatus(`final_${finalToken}`, 'approved')
+                if (!approveSnapshotResult.success) {
+                    alert(`Failed to approve final snapshot: ${approveSnapshotResult.error || 'Unknown error'}`)
+                    return
+                }
+            }
+
             // If already approved, don't attempt an invalid Approved -> Proposed transition.
             if (event?.status === 'approved') {
-                router.push(`/planner/events/${eventId}`)
+                router.push(`/planner/events/${eventId}/proposal`)
                 return
             }
 
@@ -159,8 +180,8 @@ export default function ProposalPreviewPage() {
             const result = await approveEvent(eventId)
 
             if (result.success) {
-                // Redirect to event page
-                router.push(`/planner/events/${eventId}`)
+                // Redirect to proposal versions page so the new snapshot status is visible
+                router.push(`/planner/events/${eventId}/proposal`)
             } else {
                 alert(`Failed to approve proposal: ${result.error}`)
             }
