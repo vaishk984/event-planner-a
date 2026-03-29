@@ -46,11 +46,14 @@ export async function getEvent(id: string): Promise<Event | null> {
     }
 
     const event = await eventService.getEvent(id, plannerId);
-    if (!event?.submissionId) {
-        return event;
+    if (!event) {
+        return null;
     }
 
-    const intake = await supabaseIntakeRepository.findById(event.submissionId);
+    const intake = event.submissionId
+        ? await supabaseIntakeRepository.findById(event.submissionId)
+        : await supabaseIntakeRepository.findByConvertedEventId(event.id);
+
     if (!intake) {
         return event;
     }
