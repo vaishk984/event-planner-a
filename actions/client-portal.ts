@@ -1108,6 +1108,9 @@ export async function updateFinalProposalStatus(token: string, status: string, f
             }
         }
 
+        revalidatePath('/planner/proposals')
+        revalidatePath(`/planner/events/${updatedEventId}/proposal`)
+        revalidatePath(`/planner/events/${updatedEventId}/client`)
         return { success: true }
     }
 
@@ -1148,6 +1151,7 @@ export async function updateFinalProposalStatus(token: string, status: string, f
         return { success: false, error: 'Final proposal not found' }
     }
 
+    revalidatePath('/planner/proposals')
     return { success: true }
 }
 
